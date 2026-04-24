@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:brain_anchor/screens/auth/login_screen.dart';
 import 'package:brain_anchor/core/constants.dart';
 
@@ -13,6 +14,62 @@ class _PatientSignupScreenState extends State<PatientSignupScreen> {
   bool _isAnonymous = false;
   bool _agreeToPolicy = false;
   bool _isPasswordVisible = false;
+
+  DateTime? _selectedBirthdate;
+  final TextEditingController _birthdateController = TextEditingController();
+  final TextEditingController _ageController = TextEditingController();
+  String? _selectedGender;
+
+  @override
+  void dispose() {
+    _birthdateController.dispose();
+    _ageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectBirthdate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != _selectedBirthdate) {
+      setState(() {
+        _selectedBirthdate = picked;
+        _birthdateController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+        _calculateAge(picked);
+      });
+    }
+  }
+
+  void _calculateAge(DateTime birthdate) {
+    final today = DateTime.now();
+    int age = today.year - birthdate.year;
+    if (today.month < birthdate.month ||
+        (today.month == birthdate.month && today.day < birthdate.day)) {
+      age--;
+    }
+    _ageController.text = age.toString();
+  }
+
+  void _showPolicyModal(BuildContext context, String title) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: Text('This is the full content for $title.\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _signup() {
     // Navigate to Login after signup or directly to dashboard
@@ -69,13 +126,13 @@ class _PatientSignupScreenState extends State<PatientSignupScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Sign up anonymously',
+                          'Stay anonymous to doctors',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
-                          'Hide your real identity for privacy.',
+                          'Your real name will be hidden during consultations.',
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -91,15 +148,65 @@ class _PatientSignupScreenState extends State<PatientSignupScreen> {
             ),
             const SizedBox(height: 24),
 
-            if (!_isAnonymous) ...[
-              TextFormField(
+            TextFormField(
                 decoration: const InputDecoration(
-                  hintText: 'Full Name',
+                  hintText: 'First Name',
                   prefixIcon: Icon(Icons.person_outline),
                 ),
               ),
               const SizedBox(height: 16),
-            ],
+              TextFormField(
+                decoration: const InputDecoration(
+                  hintText: 'Middle Name (Optional)',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                decoration: const InputDecoration(
+                  hintText: 'Last Name',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _birthdateController,
+                readOnly: true,
+                onTap: () => _selectBirthdate(context),
+                decoration: const InputDecoration(
+                  hintText: 'Birthdate',
+                  prefixIcon: Icon(Icons.calendar_today_outlined),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _ageController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  hintText: 'Age',
+                  prefixIcon: Icon(Icons.cake_outlined),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedGender,
+                decoration: const InputDecoration(
+                  hintText: 'Gender',
+                  prefixIcon: Icon(Icons.people_outline),
+                ),
+                items: ['Male', 'Female', 'Prefer not to say', 'Other']
+                    .map((gender) => DropdownMenuItem(
+                          value: gender,
+                          child: Text(gender),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedGender = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
 
             TextFormField(
               decoration: const InputDecoration(
@@ -145,9 +252,34 @@ class _PatientSignupScreenState extends State<PatientSignupScreen> {
                       setState(() => _agreeToPolicy = val ?? false),
                 ),
                 Expanded(
-                  child: Text(
-                    'I agree to the Privacy Policy & Terms of Service',
-                    style: theme.textTheme.bodyMedium,
+                  child: RichText(
+                    text: TextSpan(
+                      style: theme.textTheme.bodyMedium,
+                      children: [
+                        const TextSpan(text: 'I agree to the '),
+                        TextSpan(
+                          text: 'Privacy Policy',
+                          style: TextStyle(
+                            color: theme.colorScheme.secondary,
+                            decoration: TextDecoration.underline,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () => _showPolicyModal(context, 'Privacy Policy'),
+                        ),
+                        const TextSpan(text: ' and '),
+                        TextSpan(
+                          text: 'Terms of Service',
+                          style: TextStyle(
+                            color: theme.colorScheme.secondary,
+                            decoration: TextDecoration.underline,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () => _showPolicyModal(context, 'Terms of Service'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

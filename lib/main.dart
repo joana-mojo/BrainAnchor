@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:brain_anchor/theme/app_theme.dart';
 import 'package:brain_anchor/screens/splash_screen.dart';
-// other imports will be added later
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await dotenv.load(fileName: ".env");
+  
+  await Supabase.initialize(
+    url: dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
+    anonKey: dotenv.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ?? '',
+  );
+
   runApp(const BrainAnchorApp());
 }
 
