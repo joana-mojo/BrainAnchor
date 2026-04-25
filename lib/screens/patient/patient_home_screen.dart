@@ -61,26 +61,58 @@ class PatientHomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _QuickActionCard(
-                      title: 'Symptom Check',
-                      icon: Icons.psychology,
-                      color: theme.colorScheme.primary,
-                      onTap: () {},
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Left Primary Card
+                    Expanded(
+                      flex: 1,
+                      child: _PrimaryActionCard(
+                        title: 'AI Symptom\nChecker',
+                        description: 'Get an instant assessment and advice.',
+                        icon: Icons.psychology_outlined,
+                        iconColor: theme.colorScheme.primary,
+                        backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                        onTap: () {
+                          // TODO: Navigate to AI Checker
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _QuickActionCard(
-                      title: 'Book Consult',
-                      icon: Icons.calendar_month,
-                      color: theme.colorScheme.secondary,
-                      onTap: () {},
+                    const SizedBox(width: 12),
+                    // Right Stacked Cards
+                    Expanded(
+                      flex: 1,
+                      child: Column(
+                        children: [
+                          _SecondaryActionCard(
+                            title: 'Consultation',
+                            subtitle: 'Find a Doctor',
+                            icon: Icons.medical_services_outlined,
+                            iconColor: Colors.orange.shade300,
+                            onTap: () {},
+                          ),
+                          const SizedBox(height: 8),
+                          _SecondaryActionCard(
+                            title: 'Messages',
+                            subtitle: 'Your Chats',
+                            icon: Icons.chat_bubble_outline,
+                            iconColor: Colors.pink.shade300,
+                            onTap: () {},
+                          ),
+                          const SizedBox(height: 8),
+                          _SecondaryActionCard(
+                            title: 'Health Vault',
+                            subtitle: 'View Records',
+                            icon: Icons.folder_shared_outlined,
+                            iconColor: Colors.teal.shade400,
+                            onTap: () {},
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 32),
 
@@ -191,16 +223,20 @@ class PatientHomeScreen extends StatelessWidget {
   }
 }
 
-class _QuickActionCard extends StatelessWidget {
+class _PrimaryActionCard extends StatelessWidget {
   final String title;
+  final String description;
   final IconData icon;
-  final Color color;
+  final Color iconColor;
+  final Color backgroundColor;
   final VoidCallback onTap;
 
-  const _QuickActionCard({
+  const _PrimaryActionCard({
     required this.title,
+    required this.description,
     required this.icon,
-    required this.color,
+    required this.iconColor,
+    required this.backgroundColor,
     required this.onTap,
   });
 
@@ -209,29 +245,105 @@ class _QuickActionCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: iconColor.withBlue(200), // Darken the primary color slightly for text
+                height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 12,
+                color: iconColor.withBlue(150).withOpacity(0.8),
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: iconColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Colors.white, size: 28),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SecondaryActionCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color iconColor;
+  final VoidCallback onTap;
+
+  const _SecondaryActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+        ),
+        child: Row(
+          children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                shape: BoxShape.circle,
+                color: iconColor,
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: color),
+              child: Icon(icon, color: Colors.white, size: 22),
             ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

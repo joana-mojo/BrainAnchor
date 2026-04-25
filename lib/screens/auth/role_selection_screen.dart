@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:brain_anchor/core/constants.dart';
-import 'package:brain_anchor/screens/auth/patient_signup_screen.dart';
+import 'package:brain_anchor/screens/auth/signup/step1_mobile_screen.dart';
 import 'package:brain_anchor/screens/auth/doctor_signup_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
@@ -55,6 +55,16 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 isSelected: _selectedRole == AppConstants.rolePatient,
                 onTap: () {
                   setState(() => _selectedRole = AppConstants.rolePatient);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const Step1MobileScreen(),
+                    ),
+                  ).then((_) {
+                    if (mounted) {
+                      setState(() => _selectedRole = null);
+                    }
+                  });
                 },
               ),
               const SizedBox(height: 16),
@@ -67,36 +77,17 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 isSelected: _selectedRole == AppConstants.roleDoctor,
                 onTap: () {
                   setState(() => _selectedRole = AppConstants.roleDoctor);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DoctorSignupScreen(),
+                    ),
+                  ).then((_) {
+                    if (mounted) {
+                      setState(() => _selectedRole = null);
+                    }
+                  });
                 },
-              ),
-
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _selectedRole == null
-                      ? null
-                      : () {
-                          if (_selectedRole == AppConstants.rolePatient) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const PatientSignupScreen(),
-                              ),
-                            );
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const DoctorSignupScreen(),
-                              ),
-                            );
-                          }
-                        },
-                  child: const Text('Continue'),
-                ),
               ),
             ],
           ),
