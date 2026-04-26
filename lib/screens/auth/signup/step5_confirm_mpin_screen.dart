@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:brain_anchor/widgets/step_indicator.dart';
-import 'package:brain_anchor/screens/auth/login_screen.dart';
+import 'package:brain_anchor/services/auth_service.dart';
+import 'package:brain_anchor/services/patient_service.dart';
+import 'package:brain_anchor/screens/patient/patient_main_screen.dart';
 
 class Step5ConfirmMpinScreen extends StatefulWidget {
   final String originalMpin;
+  final Map<String, dynamic> patientData;
 
-  const Step5ConfirmMpinScreen({super.key, required this.originalMpin});
+  const Step5ConfirmMpinScreen({
+    super.key,
+    required this.originalMpin,
+    required this.patientData,
+  });
 
   @override
   State<Step5ConfirmMpinScreen> createState() => _Step5ConfirmMpinScreenState();
@@ -14,6 +21,10 @@ class Step5ConfirmMpinScreen extends StatefulWidget {
 class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
   String _mpin = '';
   String? _errorMsg;
+  bool _isLoading = false;
+
+  final _authService = AuthService();
+  final _patientService = PatientService();
 
   void _onKeypadTap(String value) {
     if (_mpin.length < 4) {
@@ -33,14 +44,49 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
     }
   }
 
-  void _finishSetup() {
+  Future<void> _finishSetup() async {
     if (_mpin == widget.originalMpin) {
-      // Setup successful, redirect to Login
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
+      setState(() => _isLoading = true);
+      
+      try {
+        final user = _authService.currentUser;
+        if (user == null) throw Exception('No authenticated user found.');
+
+        // 1. Create Patient Profile
+        await _patientService.createPatientProfile(
+          userId: user.id,
+          phoneNumber: user.phone ?? '',
+          firstName: widget.patientData['firstName'],
+          middleName: widget.patientData['middleName'],
+          lastName: widget.patientData['lastName'],
+          nickname: widget.patientData['nickname'],
+          suffix: widget.patientData['suffix'],
+          birthday: widget.patientData['birthday'],
+          sexAssignedAtBirth: widget.patientData['sexAssignedAtBirth'],
+          genderIdentity: widget.patientData['genderIdentity'],
+          email: widget.patientData['email'],
+        );
+
+        // 2. Hash and Save MPIN
+        await _patientService.saveMpin(
+          userId: user.id,
+          mpin: _mpin,
+        );
+
+        if (!mounted) return;
+        // 3. Redirect to Patient Dashboard
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const PatientMainScreen()),
+          (route) => false,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating account: $e')),
+        );
+        setState(() => _isLoading = false);
+      }
     } else {
       setState(() {
         _errorMsg = 'MPIN does not match. Try again.';
@@ -163,11 +209,18 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _mpin.length == 4 ? _finishSetup : null,
+                  onPressed: (_mpin.length == 4 && !_isLoading) ? _finishSetup : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: const Text('Finish / Create Account'),
+                  child: _isLoading 
+                    ? const SizedBox(
+                        height: 24, 
+                        width: 24, 
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      )
+                    : const Text('Finish / Create Account'),
                 ),
               ),
             ],

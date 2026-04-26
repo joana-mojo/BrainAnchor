@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Brand Colors
-  static const Color primaryColor = Color(0xFF4A90E2);
-  static const Color primaryDark = Color(0xFF2C3E50);
-  static const Color secondaryColor = Color(0xFF00B4DB); // Teal
-  static const Color backgroundColor = Color(0xFFF7F9FC);
+  // Brand Colors - Updated to Soothing Palette
+  static const Color primaryColor = Color(0xFF5C88DA); // Soft Calming Blue
+  static const Color primaryDark = Color(0xFF1E293B); // Deep Slate
+  static const Color secondaryColor = Color(0xFF4EA9A3); // Gentle Teal/Green
+  static const Color backgroundColor = Color(0xFFF9FAFB); // Soft Neutral White
   static const Color surfaceColor = Colors.white;
-  static const Color textPrimary = Color(0xFF2C3E50);
-  static const Color textSecondary = Color(0xFF7F8C8D);
-  static const Color errorColor = Color(0xFFE74C3C);
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B); // Cool Grey
+  static const Color errorColor = Color(0xFFEF4444); // Softer Red
+  
+  // Mood Colors (Accessible Accents)
+  static const Color moodCalm = Color(0xFFA8D5BA);
+  static const Color moodNeutral = Color(0xFFFDE68A);
+  static const Color moodStressed = Color(0xFFFDBA74);
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
@@ -22,19 +27,17 @@ class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: primaryColor,
         secondary: secondaryColor,
-        background: backgroundColor,
         surface: surfaceColor,
         error: errorColor,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
-        onBackground: textPrimary,
         onSurface: textPrimary,
       ),
       scaffoldBackgroundColor: backgroundColor,
-      textTheme: GoogleFonts.poppinsTextTheme().apply(
+      textTheme: GoogleFonts.outfitTextTheme().apply(
         bodyColor: textPrimary,
         displayColor: textPrimary,
       ),
@@ -43,11 +46,11 @@ class AppTheme {
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(24), // Softer, rounder buttons
           ),
-          elevation: 2,
+          elevation: 0, // Flat design with soft shadows if needed
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          textStyle: GoogleFonts.poppins(
+          textStyle: GoogleFonts.outfit(
             fontWeight: FontWeight.w600,
             fontSize: 16,
           ),
@@ -58,10 +61,10 @@ class AppTheme {
           foregroundColor: primaryColor,
           side: const BorderSide(color: primaryColor, width: 2),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(24),
           ),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          textStyle: GoogleFonts.poppins(
+          textStyle: GoogleFonts.outfit(
             fontWeight: FontWeight.w600,
             fontSize: 16,
           ),
@@ -69,11 +72,8 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceColor,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 16,
-        ),
+        fillColor: const Color(0xFFF1F5F9), // Very soft grey background
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -90,13 +90,14 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: errorColor, width: 2),
         ),
-        hintStyle: GoogleFonts.poppins(color: textSecondary),
+        hintStyle: GoogleFonts.outfit(color: textSecondary),
       ),
       cardTheme: CardThemeData(
         color: surfaceColor,
-        elevation: 4,
-        shadowColor: Colors.black.withOpacity(0.05),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0, // Handled by box shadows for softer look
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
       ),
     );
   }

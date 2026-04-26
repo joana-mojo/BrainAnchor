@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:brain_anchor/screens/doctor/doctor_main_screen.dart';
 import 'package:brain_anchor/screens/auth/login_mpin_screen.dart';
+import 'package:brain_anchor/screens/auth/welcome_screen.dart';
 import 'package:brain_anchor/core/constants.dart';
+
+import 'package:brain_anchor/services/auth_service.dart';
+import 'package:brain_anchor/services/provider_service.dart';
+import 'package:brain_anchor/screens/auth/login_otp_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final String? initialRole;
@@ -18,6 +23,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  
+  bool _isLoading = false;
+  final _authService = AuthService();
+  final _providerService = ProviderService();
 
   @override
   void initState() {
@@ -25,29 +34,96 @@ class _LoginScreenState extends State<LoginScreen> {
     _selectedRole = widget.initialRole ?? AppConstants.rolePatient;
   }
 
-  void _login() {
-    if (_selectedRole == AppConstants.rolePatient) {
-      // Validate phone number length
-      final phone = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
-      if (phone.length == 10) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PatientLoginMpinScreen(phoneNumber: phone),
-          ),
-        );
+  Future<void> _login() async {
+    setState(() => _isLoading = true);
+
+    try {
+      if (_selectedRole == AppConstants.rolePatient) {
+        // Patient Flow: Send OTP then verify
+        final phone = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+        if (phone.length == 10) {
+          final fullPhoneNumber = '+63$phone';
+          await _authService.signInWithOtp(fullPhoneNumber);
+          
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LoginOtpScreen(phoneNumber: fullPhoneNumber),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a valid 10-digit mobile number.')),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid 10-digit mobile number.')),
+        // Doctor Flow: Email/Password
+        final authResponse = await _authService.signInWithPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
         );
+
+        final user = authResponse.user;
+        if (user == null) throw Exception('Login failed.');
+
+        // Verify role and status
+        final role = await _authService.getCurrentUserRole();
+        if (role != 'provider') throw Exception('Invalid role for this login.');
+
+        final status = await _providerService.getProviderStatus(user.id);
+        
+        if (!mounted) return;
+        
+        if (status == 'approved') {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const DoctorMainScreen()),
+            (route) => false,
+          );
+        } else if (status == 'pending') {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Pending Approval'),
+              content: const Text('Your account is currently under review. Please wait for approval.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _authService.signOut();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('OK'),
+                )
+              ],
+            ),
+          );
+        } else if (status == 'rejected') {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Account Rejected'),
+              content: const Text('Your provider registration was rejected.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _authService.signOut();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('OK'),
+                )
+              ],
+            ),
+          );
+        }
       }
-    } else {
-      // Bypass real authentication for doctor and navigate
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const DoctorMainScreen()),
-        (route) => false,
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login Error: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -60,7 +136,16 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: const BackButton(),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+              (route) => false,
+            );
+          },
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -236,8 +321,14 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _login,
-                  child: Text(isPatient ? 'Next' : 'Login'),
+                  onPressed: _isLoading ? null : _login,
+                  child: _isLoading 
+                    ? const SizedBox(
+                        height: 24, 
+                        width: 24, 
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      )
+                    : Text(isPatient ? 'Next' : 'Login'),
                 ),
               ),
               const SizedBox(height: 32),

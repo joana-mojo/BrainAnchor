@@ -6,12 +6,12 @@ import 'package:brain_anchor/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await dotenv.load(fileName: ".env");
-  
+
   await Supabase.initialize(
-    url: dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
-    anonKey: dotenv.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ?? '',
+    url: 'https://thuntsxzzfhbsliwlqte.supabase.co',
+    anonKey: 'sb_publishable_6lFOmQnnvVix_EhchjAMTQ_CEKrM6Dp',
   );
 
   runApp(const BrainAnchorApp());

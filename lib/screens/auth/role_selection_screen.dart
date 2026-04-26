@@ -71,7 +71,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
               // Doctor Card
               _RoleCard(
-                title: 'Doctor',
+                title: 'Mental Health Provider',
                 description: 'I am a mental health professional.',
                 icon: Icons.medical_services_rounded,
                 isSelected: _selectedRole == AppConstants.roleDoctor,

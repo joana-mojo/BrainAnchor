@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 class PatientHomeScreen extends StatelessWidget {
   const PatientHomeScreen({super.key});
@@ -8,204 +9,422 @@ class PatientHomeScreen extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Greeting Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      backgroundColor: Colors.white, // Overall background is white to match the mockup
+      body: Stack(
+        children: [
+          // Background soft gradient
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 250,
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFFF4F0FF), // Soft pastel purple
+                    Colors.white,
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+          ),
+          
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  // 1. Top Greeting Section
+                  _buildTopBar(theme),
+                  const SizedBox(height: 32),
+
+                  // 2. Mood Check-in
+                  Row(
                     children: [
                       Text(
-                        'Good Morning,',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.onBackground.withOpacity(
-                            0.6,
-                          ),
+                        'How are you feeling today?',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'User',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onBackground,
-                        ),
-                      ),
+                      const SizedBox(width: 8),
+                      const Text('✨', style: TextStyle(fontSize: 20)),
                     ],
                   ),
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: theme.colorScheme.secondary.withOpacity(
-                      0.2,
-                    ),
-                    child: Icon(
-                      Icons.person,
-                      color: theme.colorScheme.secondary,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Your feelings matter. Take a moment for you.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 32),
-
-              // Quick Actions
-              Text(
-                'How are you feeling today?',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Left Primary Card
-                    Expanded(
-                      flex: 1,
-                      child: _PrimaryActionCard(
-                        title: 'AI Symptom\nChecker',
-                        description: 'Get an instant assessment and advice.',
-                        icon: Icons.psychology_outlined,
-                        iconColor: theme.colorScheme.primary,
-                        backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-                        onTap: () {
-                          // TODO: Navigate to AI Checker
-                        },
+                  const SizedBox(height: 20),
+                  _buildMoodCheckIn(),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('🤍', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 8),
+                      Text(
+                        "It's okay to feel what you feel.",
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Right Stacked Cards
-                    Expanded(
-                      flex: 1,
-                      child: Column(
+                      const SizedBox(width: 8),
+                      const Text('🌿', style: TextStyle(fontSize: 16)),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  // 3. Care Team
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         children: [
-                          _SecondaryActionCard(
-                            title: 'Consultation',
-                            subtitle: 'Find a Doctor',
-                            icon: Icons.medical_services_outlined,
-                            iconColor: Colors.orange.shade300,
-                            onTap: () {},
+                          Text(
+                            'Your Care Team',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          _SecondaryActionCard(
-                            title: 'Messages',
-                            subtitle: 'Your Chats',
-                            icon: Icons.chat_bubble_outline,
-                            iconColor: Colors.pink.shade300,
-                            onTap: () {},
-                          ),
-                          const SizedBox(height: 8),
-                          _SecondaryActionCard(
-                            title: 'Health Vault',
-                            subtitle: 'View Records',
-                            icon: Icons.folder_shared_outlined,
-                            iconColor: Colors.teal.shade400,
-                            onTap: () {},
-                          ),
+                          const SizedBox(width: 8),
+                          const Text('🤍', style: TextStyle(fontSize: 20)),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Recommended Doctors
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Recommended Doctors',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                      TextButton(
+                        onPressed: () {},
+                        child: Text(
+                          'See All >',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  TextButton(onPressed: () {}, child: const Text('See All')),
+                  const SizedBox(height: 16),
+                  _buildCareTeam(theme),
+                  const SizedBox(height: 32),
+
+                  // 4. Quick Actions
+                  Row(
+                    children: [
+                      Text(
+                        'Quick Actions',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('⚡', style: TextStyle(fontSize: 20)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildQuickActions(theme),
+                  const SizedBox(height: 32),
+
+                  // 5. Motivational Banner
+                  _buildMotivationalBanner(theme),
+                  const SizedBox(height: 24),
                 ],
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 160,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: 3,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(width: 16),
-                  itemBuilder: (context, index) {
-                    return _DoctorCard(
-                      name: 'Dr. Sarah Smith',
-                      specialty: 'Clinical Psychologist',
-                      rating: 4.8,
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 32),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-              // Mental Health Tips
-              Text(
-                'Daily Wellness Tip',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+  Widget _buildTopBar(ThemeData theme) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('☀️', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 8),
+                Text(
+                  'Good Morning,',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  'Joana',
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text('💜', style: TextStyle(fontSize: 22)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "You're not alone, we're with you.",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        Stack(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                    blurRadius: 15,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const CircleAvatar(
+                radius: 30,
+                backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=5'), // Sample avatar
+                backgroundColor: Color(0xFFF1F5F9),
+              ),
+            ),
+            Positioned(
+              bottom: 4,
+              right: 4,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4ADE80), // Green online status
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
                 ),
               ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      theme.colorScheme.secondary.withOpacity(0.8),
-                      theme.colorScheme.primary.withOpacity(0.8),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMoodCheckIn() {
+    final moods = [
+      {
+        'emoji': '🤩',
+        'title': 'Great',
+        'subtitle': 'Feeling amazing!',
+        'color': const Color(0xFFE8F8F5), // Soft Mint
+        'textColor': const Color(0xFF1ABC9C)
+      },
+      {
+        'emoji': '🙂',
+        'title': 'Good',
+        'subtitle': 'Feeling good',
+        'color': const Color(0xFFEBF5FB), // Soft Blue
+        'textColor': const Color(0xFF3498DB)
+      },
+      {
+        'emoji': '😐',
+        'title': 'Okay',
+        'subtitle': 'Just okay',
+        'color': const Color(0xFFFEF9E7), // Soft Yellow
+        'textColor': const Color(0xFFF1C40F)
+      },
+      {
+        'emoji': '😢',
+        'title': 'Sad',
+        'subtitle': 'Feeling low',
+        'color': const Color(0xFFFDEDEC), // Soft Peach
+        'textColor': const Color(0xFFE74C3C)
+      },
+      {
+        'emoji': '😖',
+        'title': 'Stressed',
+        'subtitle': 'Very overwhelmed',
+        'color': const Color(0xFFFADBD8), // Soft Red/Pink
+        'textColor': const Color(0xFFC0392B)
+      },
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: moods.map((mood) {
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Container(
+              height: 135,
+              padding: const EdgeInsets.symmetric(horizontal: 2.0),
+              decoration: BoxDecoration(
+                color: mood['color'] as Color,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: (mood['color'] as Color).withValues(alpha: 0.5),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    mood['emoji'] as String,
+                    style: const TextStyle(fontSize: 32),
+                  ),
+                  const SizedBox(height: 10),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      mood['title'] as String,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
-                  ],
-                ),
-                child: Row(
+                  ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      mood['subtitle'] as String,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: mood['textColor'] as Color,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCareTeam(ThemeData theme) {
+    final colors = [
+      const Color(0xFFB39DDB), // Soft Purple
+      const Color(0xFF80CBC4), // Soft Teal
+      const Color(0xFFFFAB91), // Soft Coral
+    ];
+
+    return SizedBox(
+      height: 140,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: 3,
+        clipBehavior: Clip.none,
+        separatorBuilder: (_, __) => const SizedBox(width: 16),
+        itemBuilder: (context, index) {
+          final buttonColor = colors[index % colors.length];
+          return Container(
+            width: 220,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: buttonColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.self_improvement,
-                        color: Colors.white,
-                      ),
+                    Stack(
+                      children: [
+                        const CircleAvatar(
+                          radius: 22,
+                          backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=1'), // Sample doctor
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4ADE80),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Practice Mindfulness',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                            'Dr. Sarah',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Psychologist',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textSecondary,
+                              fontSize: 10,
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            'Take 5 minutes today to focus purely on your breathing.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white.withOpacity(0.9),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: buttonColor.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '4.9',
+                                  style: TextStyle(
+                                    color: buttonColor.withAlpha(200),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                Icon(Icons.star, color: buttonColor.withAlpha(200), size: 10),
+                              ],
                             ),
                           ),
                         ],
@@ -213,224 +432,196 @@ class PatientHomeScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
+                const Spacer(),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: buttonColor,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.chat_bubble_outline, color: Colors.white, size: 14),
+                          SizedBox(width: 6),
+                          Text(
+                            'Connect',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      right: 4,
+                      bottom: 22,
+                      child: Icon(
+                        Icons.eco_outlined,
+                        color: buttonColor.withValues(alpha: 0.4),
+                        size: 36,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
-}
 
-class _PrimaryActionCard extends StatelessWidget {
-  final String title;
-  final String description;
-  final IconData icon;
-  final Color iconColor;
-  final Color backgroundColor;
-  final VoidCallback onTap;
-
-  const _PrimaryActionCard({
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.iconColor,
-    required this.backgroundColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildQuickActions(ThemeData theme) {
+    return Column(
+      children: [
+        Row(
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: iconColor.withBlue(200), // Darken the primary color slightly for text
-                height: 1.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: TextStyle(
-                fontSize: 12,
-                color: iconColor.withBlue(150).withOpacity(0.8),
-              ),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: iconColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: Colors.white, size: 28),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SecondaryActionCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color iconColor;
-  final VoidCallback onTap;
-
-  const _SecondaryActionCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.iconColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+              child: _buildActionCard(
+                icon: '🧠',
+                title: 'AI Symptom\nChecker',
+                subtitle: 'Get an instant assessment',
+                color: const Color(0xFFF3E5F5), // Light purple
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                icon: '🧘‍♀️',
+                title: 'Guided\nRelaxation',
+                subtitle: 'Calm your mind',
+                color: const Color(0xFFE0F2F1), // Light teal
               ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                icon: '📖',
+                title: 'Mood\nJournal',
+                subtitle: 'Write your feelings',
+                color: const Color(0xFFFBE9E7), // Light coral
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                icon: '🌱',
+                title: 'Wellness\nTools',
+                subtitle: 'Helpful resources',
+                color: const Color(0xFFFFF8E1), // Light yellow
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
-}
 
-class _DoctorCard extends StatelessWidget {
-  final String name;
-  final String specialty;
-  final double rating;
-
-  const _DoctorCard({
-    required this.name,
-    required this.specialty,
-    required this.rating,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget _buildActionCard({
+    required String icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+  }) {
     return Container(
-      width: 240,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
+        color: color.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: color.withValues(alpha: 0.4),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 28)),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMotivationalBanner(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFFE8EAF6), // Very light indigo
+            Color(0xFFF3E5F5), // Very light purple
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD1C4E9).withValues(alpha: 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 32,
-            backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-            child: Icon(
-              Icons.person,
-              color: theme.colorScheme.primary,
-              size: 32,
-            ),
-          ),
+          const Text('🤍', style: TextStyle(fontSize: 24)),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                const Text(
+                  'Small steps every day lead to big changes.',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  specialty,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onBackground.withOpacity(0.6),
+                  "You're doing better than you think. 🌞☁️",
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const Spacer(),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.star_rounded,
-                      color: Colors.amber,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      rating.toString(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),

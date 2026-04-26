@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:brain_anchor/screens/patient/patient_main_screen.dart';
+import 'package:brain_anchor/theme/app_theme.dart';
+import 'package:brain_anchor/services/auth_service.dart';
+import 'package:brain_anchor/services/patient_service.dart';
 
 class PatientLoginMpinScreen extends StatefulWidget {
   final String phoneNumber;
@@ -12,11 +15,17 @@ class PatientLoginMpinScreen extends StatefulWidget {
 
 class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
   String _mpin = '';
+  String? _errorMsg;
+  bool _isLoading = false;
+
+  final _authService = AuthService();
+  final _patientService = PatientService();
 
   void _onKeypadTap(String value) {
     if (_mpin.length < 4) {
       setState(() {
         _mpin += value;
+        _errorMsg = null;
       });
     }
   }
@@ -25,18 +34,46 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
     if (_mpin.isNotEmpty) {
       setState(() {
         _mpin = _mpin.substring(0, _mpin.length - 1);
+        _errorMsg = null;
       });
     }
   }
 
-  void _login() {
+  Future<void> _login() async {
     if (_mpin.length == 4) {
-      // Static logic: bypass real authentication and log in
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const PatientMainScreen()),
-        (route) => false,
-      );
+      setState(() => _isLoading = true);
+
+      try {
+        final user = _authService.currentUser;
+        if (user == null) throw Exception('No authenticated user found.');
+
+        final isValid = await _patientService.verifyMpin(
+          userId: user.id,
+          mpin: _mpin,
+        );
+
+        if (!mounted) return;
+
+        if (isValid) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const PatientMainScreen()),
+            (route) => false,
+          );
+        } else {
+          setState(() {
+            _errorMsg = 'Incorrect MPIN. Please try again.';
+            _mpin = '';
+          });
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -48,103 +85,199 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
         : 'XXXX';
 
     return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: const BackButton(),
+        leading: const BackButton(color: AppTheme.textPrimary),
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 8.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                'Enter MPIN',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
+                child: const Icon(
+                  Icons.lock_outline_rounded,
+                  size: 40,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Welcome Back',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
-                'Please enter the MPIN for your account ending in $maskedPhone.',
+                'Enter your 4-digit MPIN to access your wellness account ending in $maskedPhone.',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: AppTheme.textSecondary,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              
+              // PIN Dots Container
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(4, (index) {
+                    final isFilled = index < _mpin.length;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeInOut,
+                      margin: const EdgeInsets.symmetric(horizontal: 12),
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isFilled ? AppTheme.primaryColor : Colors.white,
+                        border: Border.all(
+                          color: isFilled ? AppTheme.primaryColor : AppTheme.primaryColor.withValues(alpha: 0.2),
+                          width: 2,
+                        ),
+                        boxShadow: isFilled ? [
+                          BoxShadow(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          )
+                        ] : null,
+                      ),
+                    );
+                  }),
                 ),
               ),
-              const Spacer(),
               
-              // PIN Dots
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(4, (index) {
-                  final isFilled = index < _mpin.length;
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isFilled ? theme.colorScheme.primary : theme.colorScheme.surface,
-                      border: Border.all(
-                        color: isFilled ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.3),
-                        width: 2,
-                      ),
-                    ),
-                  );
-                }),
-              ),
+              if (_errorMsg != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _errorMsg!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.errorColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+              if (_isLoading) ...[
+                const SizedBox(height: 16),
+                const CircularProgressIndicator(color: AppTheme.primaryColor),
+              ],
               
-              const Spacer(),
+              const SizedBox(height: 24),
               
               // Numeric Keypad
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 1.5,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                ),
-                itemCount: 12,
-                itemBuilder: (context, index) {
-                  if (index == 9) return const SizedBox.shrink(); // Empty slot
-                  if (index == 11) {
-                    return InkWell(
-                      onTap: _onDeleteTap,
-                      customBorder: const CircleBorder(),
-                      child: Icon(Icons.backspace_outlined, color: theme.colorScheme.onSurface),
-                    );
-                  }
-                  
-                  final number = index == 10 ? '0' : '${index + 1}';
-                  return InkWell(
-                    onTap: () => _onKeypadTap(number),
-                    customBorder: const CircleBorder(),
-                    child: Center(
-                      child: Text(
-                        number,
-                        style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w600),
+              Expanded(
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 1.5,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: 12,
+                  itemBuilder: (context, index) {
+                    if (index == 9) return const SizedBox.shrink(); // Empty slot
+                    if (index == 11) {
+                      return Material(
+                        color: Colors.transparent,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.hardEdge,
+                        child: InkWell(
+                          onTap: _onDeleteTap,
+                          splashColor: AppTheme.errorColor.withValues(alpha: 0.1),
+                          highlightColor: AppTheme.errorColor.withValues(alpha: 0.05),
+                          child: const Icon(
+                            Icons.backspace_rounded, 
+                            color: AppTheme.textSecondary,
+                            size: 28,
+                          ),
+                        ),
+                      );
+                    }
+                    
+                    final number = index == 10 ? '0' : '${index + 1}';
+                    return Material(
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    ),
-                  );
-                },
+                      elevation: 0,
+                      shadowColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      clipBehavior: Clip.hardEdge,
+                      child: InkWell(
+                        onTap: () => _onKeypadTap(number),
+                        highlightColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                        splashColor: AppTheme.primaryColor.withValues(alpha: 0.2),
+                        child: Center(
+                          child: Text(
+                            number,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
               
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
               
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _mpin.length == 4 ? _login : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.primary,
+                    backgroundColor: AppTheme.primaryColor,
+                    disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 0.3),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(32),
+                    ),
+                    elevation: _mpin.length == 4 ? 8 : 0,
+                    shadowColor: AppTheme.primaryColor.withValues(alpha: 0.5),
                   ),
-                  child: const Text('Login'),
+                  child: Text(
+                    'Login',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _mpin.length == 4 ? Colors.white : Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
                 ),
               ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

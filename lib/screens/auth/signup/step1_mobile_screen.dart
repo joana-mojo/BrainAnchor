@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:brain_anchor/widgets/step_indicator.dart';
 import 'package:brain_anchor/screens/auth/signup/step2_otp_screen.dart';
+import 'package:brain_anchor/services/auth_service.dart';
 
 class Step1MobileScreen extends StatefulWidget {
   const Step1MobileScreen({super.key});
@@ -12,7 +13,9 @@ class Step1MobileScreen extends StatefulWidget {
 
 class _Step1MobileScreenState extends State<Step1MobileScreen> {
   final TextEditingController _phoneController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _isValid = false;
+  bool _isLoading = false;
 
   void _validateInput(String value) {
     setState(() {
@@ -22,15 +25,31 @@ class _Step1MobileScreenState extends State<Step1MobileScreen> {
     });
   }
 
-  void _nextStep() {
+  Future<void> _nextStep() async {
     if (_isValid) {
-      final phoneNumber = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => Step2OtpScreen(phoneNumber: phoneNumber),
-        ),
-      );
+      setState(() => _isLoading = true);
+      final rawNumber = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+      final fullPhoneNumber = '+63$rawNumber';
+      
+      try {
+        await _authService.signInWithOtp(fullPhoneNumber);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => Step2OtpScreen(phoneNumber: fullPhoneNumber),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 
@@ -111,11 +130,18 @@ class _Step1MobileScreenState extends State<Step1MobileScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isValid ? _nextStep : null,
+                  onPressed: (_isValid && !_isLoading) ? _nextStep : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary, // Blue CTA
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: const Text('Next'),
+                  child: _isLoading 
+                    ? const SizedBox(
+                        height: 24, 
+                        width: 24, 
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      )
+                    : const Text('Next'),
                 ),
               ),
             ],

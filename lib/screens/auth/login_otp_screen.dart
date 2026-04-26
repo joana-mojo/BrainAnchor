@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import 'package:brain_anchor/widgets/step_indicator.dart';
-import 'package:brain_anchor/screens/auth/signup/step3_personal_info_screen.dart';
 import 'package:brain_anchor/services/auth_service.dart';
+import 'package:brain_anchor/screens/auth/login_mpin_screen.dart';
 
-class Step2OtpScreen extends StatefulWidget {
+class LoginOtpScreen extends StatefulWidget {
   final String phoneNumber;
 
-  const Step2OtpScreen({super.key, required this.phoneNumber});
+  const LoginOtpScreen({super.key, required this.phoneNumber});
 
   @override
-  State<Step2OtpScreen> createState() => _Step2OtpScreenState();
+  State<LoginOtpScreen> createState() => _LoginOtpScreenState();
 }
 
-class _Step2OtpScreenState extends State<Step2OtpScreen> {
+class _LoginOtpScreenState extends State<LoginOtpScreen> {
   final List<TextEditingController> _controllers = List.generate(6, (index) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
   final AuthService _authService = AuthService();
   
-  int _secondsRemaining = 90; // 01:30
+  int _secondsRemaining = 90;
   Timer? _timer;
   bool _canResend = false;
   bool _isLoading = false;
@@ -33,12 +32,8 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    for (var node in _focusNodes) {
-      node.dispose();
-    }
-    for (var controller in _controllers) {
-      controller.dispose();
-    }
+    for (var node in _focusNodes) node.dispose();
+    for (var controller in _controllers) controller.dispose();
     super.dispose();
   }
 
@@ -49,9 +44,7 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining > 0) {
-        setState(() {
-          _secondsRemaining--;
-        });
+        setState(() => _secondsRemaining--);
       } else {
         setState(() {
           _canResend = true;
@@ -67,11 +60,9 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  bool _isOtpComplete() {
-    return _controllers.every((c) => c.text.isNotEmpty);
-  }
+  bool _isOtpComplete() => _controllers.every((c) => c.text.isNotEmpty);
 
-  Future<void> _nextStep() async {
+  Future<void> _verifyOtp() async {
     if (_isOtpComplete()) {
       setState(() => _isLoading = true);
       final otp = _controllers.map((c) => c.text).join('');
@@ -79,21 +70,19 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
       try {
         await _authService.verifyOtp(widget.phoneNumber, otp);
         if (!mounted) return;
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => const Step3PersonalInfoScreen(),
+            builder: (context) => PatientLoginMpinScreen(phoneNumber: widget.phoneNumber),
           ),
         );
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid OTP or Verification Failed')),
+          SnackBar(content: Text('Invalid OTP or Verification Failed: $e')),
         );
       } finally {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -104,13 +93,12 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
         _focusNodes[index + 1].requestFocus();
       } else {
         _focusNodes[index].unfocus();
-        // Automatically proceed
-        _nextStep();
+        _verifyOtp();
       }
     } else if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
-    setState(() {}); // Update button state
+    setState(() {});
   }
 
   @override
@@ -132,10 +120,8 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const StepIndicator(currentStep: 2, totalSteps: 5),
-              const SizedBox(height: 24),
               Text(
-                'Enter the 6-digit One-Time PIN (OTP)',
+                'Enter the OTP to Login',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.onBackground,
@@ -150,7 +136,6 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
               ),
               const SizedBox(height: 32),
               
-              // OTP Fields
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(6, (index) {
@@ -184,7 +169,6 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Resend / Timer
               Center(
                 child: Column(
                   children: [
@@ -230,18 +214,17 @@ class _Step2OtpScreenState extends State<Step2OtpScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: (_isOtpComplete() && !_isLoading) ? _nextStep : null,
+                  onPressed: (_isOtpComplete() && !_isLoading) ? _verifyOtp : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   child: _isLoading 
                     ? const SizedBox(
-                        height: 24, 
-                        width: 24, 
+                        height: 24, width: 24, 
                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                       )
-                    : const Text('Next'),
+                    : const Text('Verify & Login'),
                 ),
               ),
             ],

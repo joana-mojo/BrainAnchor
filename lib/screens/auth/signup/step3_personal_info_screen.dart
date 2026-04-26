@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:intl/intl.dart';
 import 'package:brain_anchor/widgets/step_indicator.dart';
 import 'package:brain_anchor/screens/auth/signup/step4_create_mpin_screen.dart';
+import 'package:brain_anchor/widgets/terms_and_privacy_dialog.dart';
 
 class Step3PersonalInfoScreen extends StatefulWidget {
   const Step3PersonalInfoScreen({super.key});
@@ -24,6 +26,33 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
   
   bool _sendOffers = false;
   bool _agreeToPolicy = false;
+
+  late TapGestureRecognizer _termsRecognizer;
+  late TapGestureRecognizer _privacyRecognizer;
+
+  @override
+  void initState() {
+    super.initState();
+    _termsRecognizer = TapGestureRecognizer()..onTap = () {
+      TermsAndPrivacyDialogs.showTermsOfUse(context);
+    };
+    _privacyRecognizer = TapGestureRecognizer()..onTap = () {
+      TermsAndPrivacyDialogs.showPrivacyPolicy(context);
+    };
+  }
+
+  @override
+  void dispose() {
+    _termsRecognizer.dispose();
+    _privacyRecognizer.dispose();
+    _firstNameController.dispose();
+    _middleNameController.dispose();
+    _lastNameController.dispose();
+    _nicknameController.dispose();
+    _suffixController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -50,10 +79,22 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
 
   void _nextStep() {
     if (_isFormValid()) {
+      final patientData = {
+        'firstName': _firstNameController.text.trim(),
+        'middleName': _middleNameController.text.trim().isEmpty ? null : _middleNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+        'nickname': _nicknameController.text.trim(),
+        'suffix': _suffixController.text.trim().isEmpty ? null : _suffixController.text.trim(),
+        'birthday': _selectedDate,
+        'sexAssignedAtBirth': _selectedSex,
+        'genderIdentity': _selectedGenderId,
+        'email': _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
+      };
+
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const Step4CreateMpinScreen(),
+          builder: (context) => Step4CreateMpinScreen(patientData: patientData),
         ),
       );
     }
@@ -280,14 +321,23 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                         children: [
                           const TextSpan(text: 'I agree to the '),
                           TextSpan(
-                            text: 'Terms of use',
-                            style: TextStyle(color: theme.colorScheme.primary),
+                            text: 'Terms of Use',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              decoration: TextDecoration.underline,
+                            ),
+                            recognizer: _termsRecognizer,
                           ),
-                          const TextSpan(text: ' & '),
+                          const TextSpan(text: ' and '),
                           TextSpan(
-                            text: 'Privacy Policy *',
-                            style: TextStyle(color: theme.colorScheme.primary),
+                            text: 'Privacy Policy',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              decoration: TextDecoration.underline,
+                            ),
+                            recognizer: _privacyRecognizer,
                           ),
+                          const TextSpan(text: ' *'),
                         ],
                       ),
                     ),

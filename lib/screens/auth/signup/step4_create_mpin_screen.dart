@@ -3,7 +3,8 @@ import 'package:brain_anchor/widgets/step_indicator.dart';
 import 'package:brain_anchor/screens/auth/signup/step5_confirm_mpin_screen.dart';
 
 class Step4CreateMpinScreen extends StatefulWidget {
-  const Step4CreateMpinScreen({super.key});
+  final Map<String, dynamic> patientData;
+  const Step4CreateMpinScreen({super.key, required this.patientData});
 
   @override
   State<Step4CreateMpinScreen> createState() => _Step4CreateMpinScreenState();
@@ -33,7 +34,10 @@ class _Step4CreateMpinScreenState extends State<Step4CreateMpinScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => Step5ConfirmMpinScreen(originalMpin: _mpin),
+          builder: (context) => Step5ConfirmMpinScreen(
+            originalMpin: _mpin,
+            patientData: widget.patientData,
+          ),
         ),
       );
     }
