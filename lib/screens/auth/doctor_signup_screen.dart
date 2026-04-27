@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import 'package:intl/intl.dart';
-import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:brain_anchor/services/auth_service.dart';
-import 'package:brain_anchor/services/provider_service.dart';
-import 'package:brain_anchor/services/storage_service.dart';
 import 'package:brain_anchor/screens/auth/login_screen.dart';
 import 'package:brain_anchor/core/constants.dart';
 import 'package:brain_anchor/widgets/terms_and_privacy_dialog.dart';
@@ -18,42 +13,16 @@ class DoctorSignupScreen extends StatefulWidget {
 }
 
 class _DoctorSignupScreenState extends State<DoctorSignupScreen> {
-  final List<String> _specializations = [
-    'Clinical Psychologist',
-    'Psychiatrist',
-    'Therapist',
-    'Counselor',
-    'Mental Health Nurse',
-  ];
-  final List<String> _genders = [
-    'Male',
-    'Female',
-    'Other',
-    'Prefer not to say'
-  ];
-  
-  String? _selectedSpecialization;
-  String? _selectedGender;
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _agreeToPolicy = false;
   bool _isLoading = false;
-  File? _selectedFile;
 
-  final TextEditingController _firstNameController = TextEditingController();
-  final TextEditingController _middleNameController = TextEditingController();
-  final TextEditingController _lastNameController = TextEditingController();
-  final TextEditingController _suffixController = TextEditingController();
-  final TextEditingController _birthdayController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  final TextEditingController _licenseController = TextEditingController();
-  final TextEditingController _experienceController = TextEditingController();
 
   final _authService = AuthService();
-  final _providerService = ProviderService();
-  final _storageService = StorageService();
 
   late TapGestureRecognizer _termsRecognizer;
   late TapGestureRecognizer _privacyRecognizer;
@@ -73,52 +42,24 @@ class _DoctorSignupScreenState extends State<DoctorSignupScreen> {
   void dispose() {
     _termsRecognizer.dispose();
     _privacyRecognizer.dispose();
-    _firstNameController.dispose();
-    _middleNameController.dispose();
-    _lastNameController.dispose();
-    _suffixController.dispose();
-    _birthdayController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _licenseController.dispose();
-    _experienceController.dispose();
     super.dispose();
   }
 
   bool _isFormValid() {
-    return _firstNameController.text.isNotEmpty &&
-           _lastNameController.text.isNotEmpty &&
-           _birthdayController.text.isNotEmpty &&
-           _selectedGender != null &&
-           _emailController.text.isNotEmpty &&
+    return _emailController.text.isNotEmpty &&
            _passwordController.text.isNotEmpty &&
            _passwordController.text == _confirmPasswordController.text &&
-           _licenseController.text.isNotEmpty &&
-           _selectedSpecialization != null &&
-           _experienceController.text.isNotEmpty &&
-           _selectedFile != null &&
            _agreeToPolicy;
-  }
-
-  Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-    );
-
-    if (result != null) {
-      setState(() {
-        _selectedFile = File(result.files.single.path!);
-      });
-    }
   }
 
   Future<void> _register() async {
     if (_isFormValid()) {
       setState(() => _isLoading = true);
       try {
-        // 1. Sign up user
+        // 1. Sign up user (attach provider role metadata)
         final authResponse = await _authService.signUpProvider(
           email: _emailController.text.trim(),
           password: _passwordController.text,
@@ -127,37 +68,15 @@ class _DoctorSignupScreenState extends State<DoctorSignupScreen> {
         final userId = authResponse.user?.id;
         if (userId == null) throw Exception('Registration failed.');
 
-        // 2. Upload file
-        final fileUrl = await _storageService.uploadProviderDocument(
-          providerId: userId,
-          file: _selectedFile!,
-        );
-
-        // 3. Create profile
-        await _providerService.createProviderProfile(
-          userId: userId,
-          firstName: _firstNameController.text.trim(),
-          middleName: _middleNameController.text.trim().isEmpty ? null : _middleNameController.text.trim(),
-          lastName: _lastNameController.text.trim(),
-          suffix: _suffixController.text.trim().isEmpty ? null : _suffixController.text.trim(),
-          birthday: DateFormat('yyyy-MM-dd').parse(_birthdayController.text),
-          gender: _selectedGender!,
-          email: _emailController.text.trim(),
-          licenseNumber: _licenseController.text.trim(),
-          specialization: _selectedSpecialization!,
-          yearsOfExperience: int.tryParse(_experienceController.text.trim()) ?? 0,
-          verificationFileUrl: fileUrl,
-        );
-
         if (!mounted) return;
         
-        // Show success and instructions
+        // Show success and redirect to login
         showDialog(
           context: context,
           barrierDismissible: false,
           builder: (context) => AlertDialog(
-            title: const Text('Registration Submitted'),
-            content: const Text('Verification required before approval. Your account will be reviewed.'),
+            title: const Text('Account Created'),
+            content: const Text('Please check your email to verify your account. Once verified, log in to complete your profile.'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -259,7 +178,7 @@ class _DoctorSignupScreenState extends State<DoctorSignupScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      'Verification required before approval. Your account will be reviewed.',
+                      'Create your account first. You will complete your professional profile after verifying your email.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface,
                       ),
@@ -269,91 +188,6 @@ class _DoctorSignupScreenState extends State<DoctorSignupScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
-            _buildLabeledField(
-              'First Name *',
-              TextFormField(
-                controller: _firstNameController,
-                decoration: _commonInputDecoration('First Name'),
-                onChanged: (_) => setState((){}),
-              ),
-            ),
-
-            _buildLabeledField(
-              'Middle Name (Optional)',
-              TextFormField(
-                controller: _middleNameController,
-                decoration: _commonInputDecoration('Middle Name'),
-              ),
-            ),
-
-            _buildLabeledField(
-              'Last Name *',
-              TextFormField(
-                controller: _lastNameController,
-                decoration: _commonInputDecoration('Last Name'),
-                onChanged: (_) => setState((){}),
-              ),
-            ),
-
-            _buildLabeledField(
-              'Suffix (Optional)',
-              TextFormField(
-                controller: _suffixController,
-                decoration: _commonInputDecoration('ex. Jr., MD'),
-              ),
-            ),
-
-            _buildLabeledField(
-              'Birthday *',
-              InkWell(
-                onTap: () async {
-                  final DateTime? picked = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime(1990),
-                    firstDate: DateTime(1920),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) {
-                    setState(() {
-                      _birthdayController.text = DateFormat('MM/dd/yyyy').format(picked);
-                    });
-                  }
-                },
-                child: InputDecorator(
-                  decoration: _commonInputDecoration(
-                    'MM/DD/YYYY', 
-                    suffixIcon: Icon(Icons.calendar_today_outlined, color: theme.colorScheme.primary),
-                  ),
-                  child: Text(
-                    _birthdayController.text.isEmpty 
-                      ? 'MM/DD/YYYY' 
-                      : _birthdayController.text,
-                    style: TextStyle(
-                      color: _birthdayController.text.isEmpty ? Colors.grey.shade400 : Colors.black87,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            _buildLabeledField(
-              'Gender *',
-              DropdownButtonFormField<String>(
-                decoration: _commonInputDecoration('Select from the options'),
-                icon: const Icon(Icons.keyboard_arrow_down),
-                value: _selectedGender,
-                items: _genders.map((g) {
-                  return DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(fontSize: 14)));
-                }).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _selectedGender = val;
-                  });
-                },
-              ),
-            ),
 
             _buildLabeledField(
               'Email Address *',
@@ -406,85 +240,6 @@ class _DoctorSignupScreenState extends State<DoctorSignupScreen> {
                   ),
                 ),
                 onChanged: (_) => setState((){}),
-              ),
-            ),
-
-            _buildLabeledField(
-              'License Number *',
-              TextFormField(
-                controller: _licenseController,
-                decoration: _commonInputDecoration('License Number'),
-                onChanged: (_) => setState((){}),
-              ),
-            ),
-
-            _buildLabeledField(
-              'Specialization *',
-              DropdownButtonFormField<String>(
-                decoration: _commonInputDecoration('Select Specialization'),
-                icon: const Icon(Icons.keyboard_arrow_down),
-                value: _selectedSpecialization,
-                items: _specializations.map((spec) {
-                  return DropdownMenuItem(value: spec, child: Text(spec, style: const TextStyle(fontSize: 14)));
-                }).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _selectedSpecialization = val;
-                  });
-                },
-              ),
-            ),
-
-            _buildLabeledField(
-              'Years of Experience *',
-              TextFormField(
-                controller: _experienceController,
-                keyboardType: TextInputType.number,
-                decoration: _commonInputDecoration('e.g. 5'),
-                onChanged: (_) => setState((){}),
-              ),
-            ),
-
-            // File Upload UI
-            _buildLabeledField(
-              'Upload ID / License Verification *',
-              InkWell(
-                onTap: _pickFile,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _selectedFile != null ? theme.colorScheme.primary : Colors.grey.shade300,
-                      width: 1,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.white,
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        _selectedFile != null ? Icons.check_circle : Icons.cloud_upload_outlined,
-                        size: 40,
-                        color: _selectedFile != null ? theme.colorScheme.primary : theme.colorScheme.primary,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _selectedFile != null ? _selectedFile!.path.split(Platform.pathSeparator).last : 'Tap to Upload',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (_selectedFile == null)
-                        Text(
-                          'PDF, JPG, PNG (Max 5MB)',
-                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
-                        ),
-                    ],
-                  ),
-                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -566,7 +321,7 @@ class _DoctorSignupScreenState extends State<DoctorSignupScreen> {
                       width: 24, 
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                     )
-                  : const Text('Register as Provider', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  : const Text('Create Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
             const SizedBox(height: 24),

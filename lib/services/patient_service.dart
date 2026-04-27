@@ -5,10 +5,16 @@ import 'package:brain_anchor/services/supabase_config.dart';
 class PatientService {
   final _supabase = SupabaseConfig.client;
 
-  /// Creates a patient profile in 'profiles' and 'patients' tables
+  String _sha256Hex(String input) =>
+      sha256.convert(utf8.encode(input)).toString();
+
+  /// Creates a patient profile in 'profiles' and 'patients' tables.
+  ///
+  /// Either [phoneNumber] or [email] should be set so the patient can be
+  /// contacted. Both columns are nullable in the schema.
   Future<void> createPatientProfile({
     required String userId,
-    required String phoneNumber,
+    String? phoneNumber,
     required String firstName,
     String? middleName,
     required String lastName,
@@ -19,13 +25,11 @@ class PatientService {
     String? genderIdentity,
     String? email,
   }) async {
-    // 1. Insert into profiles (role = patient)
     await _supabase.from('profiles').upsert({
       'id': userId,
       'role': 'patient',
     });
 
-    // 2. Insert into patients
     await _supabase.from('patients').upsert({
       'id': userId,
       'phone_number': phoneNumber,
@@ -41,45 +45,38 @@ class PatientService {
     });
   }
 
-  /// Hashes the MPIN and saves it to 'user_mpin' table
-  Future<void> saveMpin({
+  /// Stores the patient's hashed MPIN and recovery password hash in
+  /// `user_mpin`. Both values are SHA-256 hashes — the plain values never
+  /// touch the database.
+  ///
+  /// The recovery password hash is later checked by the `reset_patient_mpin`
+  /// RPC during the "Forgot MPIN" flow.
+  Future<void> saveMpinAndRecovery({
     required String userId,
     required String mpin,
+    required String recoveryPassword,
   }) async {
-    final hashedMpin = _hashMpin(mpin);
-    
     await _supabase.from('user_mpin').upsert({
       'user_id': userId,
-      'hashed_mpin': hashedMpin,
+      'hashed_mpin': _sha256Hex(mpin),
+      'recovery_password_hash': _sha256Hex(recoveryPassword),
+      'failed_attempts': 0,
+      'locked_until': null,
       'updated_at': DateTime.now().toIso8601String(),
     });
   }
 
-  /// Verifies if the provided MPIN matches the saved hash
-  Future<bool> verifyMpin({
-    required String userId,
-    required String mpin,
-  }) async {
-    final hashedMpin = _hashMpin(mpin);
-
+  /// Returns `true` if a patient profile row exists for [userId].
+  Future<bool> hasPatientProfile(String userId) async {
     try {
       final response = await _supabase
-          .from('user_mpin')
-          .select('hashed_mpin')
-          .eq('user_id', userId)
+          .from('patients')
+          .select('id')
+          .eq('id', userId)
           .maybeSingle();
-
-      if (response == null) return false;
-      return response['hashed_mpin'] == hashedMpin;
-    } catch (e) {
+      return response != null;
+    } catch (_) {
       return false;
     }
-  }
-
-  /// Helper to hash MPIN using SHA-256
-  String _hashMpin(String mpin) {
-    final bytes = utf8.encode(mpin);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
   }
 }

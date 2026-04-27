@@ -4,6 +4,14 @@ import 'package:brain_anchor/services/auth_service.dart';
 import 'package:brain_anchor/services/patient_service.dart';
 import 'package:brain_anchor/screens/patient/patient_main_screen.dart';
 
+/// Visible signup step 4 of 4: confirm the MPIN, then create the Supabase
+/// auth user and write the patient profile + recovery password hash.
+///
+/// At this point [patientData] should contain everything we collected in
+/// the earlier steps:
+///   - email, recoveryPassword
+///   - firstName, middleName, lastName, nickname, suffix
+///   - birthday (DateTime), sexAssignedAtBirth, genderIdentity
 class Step5ConfirmMpinScreen extends StatefulWidget {
   final String originalMpin;
   final Map<String, dynamic> patientData;
@@ -44,54 +52,119 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
     }
   }
 
-  Future<void> _finishSetup() async {
-    if (_mpin == widget.originalMpin) {
-      setState(() => _isLoading = true);
-      
-      try {
-        final user = _authService.currentUser;
-        if (user == null) throw Exception('No authenticated user found.');
-
-        // 1. Create Patient Profile
-        await _patientService.createPatientProfile(
-          userId: user.id,
-          phoneNumber: user.phone ?? '',
-          firstName: widget.patientData['firstName'],
-          middleName: widget.patientData['middleName'],
-          lastName: widget.patientData['lastName'],
-          nickname: widget.patientData['nickname'],
-          suffix: widget.patientData['suffix'],
-          birthday: widget.patientData['birthday'],
-          sexAssignedAtBirth: widget.patientData['sexAssignedAtBirth'],
-          genderIdentity: widget.patientData['genderIdentity'],
-          email: widget.patientData['email'],
-        );
-
-        // 2. Hash and Save MPIN
-        await _patientService.saveMpin(
-          userId: user.id,
-          mpin: _mpin,
-        );
-
-        if (!mounted) return;
-        // 3. Redirect to Patient Dashboard
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const PatientMainScreen()),
-          (route) => false,
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating account: $e')),
-        );
-        setState(() => _isLoading = false);
-      }
-    } else {
+  Future<void> _confirmAndFinish() async {
+    if (_mpin != widget.originalMpin) {
       setState(() {
         _errorMsg = 'MPIN does not match. Try again.';
-        _mpin = ''; // Clear to retry
+        _mpin = '';
       });
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final email = widget.patientData['email'] as String?;
+    final recoveryPassword =
+        widget.patientData['recoveryPassword'] as String?;
+    final firstName = widget.patientData['firstName'] as String?;
+    final lastName = widget.patientData['lastName'] as String?;
+    final nickname = widget.patientData['nickname'] as String?;
+    final birthday = widget.patientData['birthday'] as DateTime?;
+    final sex = widget.patientData['sexAssignedAtBirth'] as String?;
+
+    if (email == null ||
+        email.isEmpty ||
+        recoveryPassword == null ||
+        recoveryPassword.isEmpty ||
+        firstName == null ||
+        lastName == null ||
+        nickname == null ||
+        birthday == null ||
+        sex == null) {
+      setState(() {
+        _isLoading = false;
+        _errorMsg =
+            'Some sign-up data is missing. Please go back and try again.';
+      });
+      return;
+    }
+
+    try {
+      final signUp = await _authService.signUpPatientWithMpin(
+        email: email,
+        mpin: _mpin,
+      );
+      if (signUp.user == null) {
+        throw Exception('Sign-up failed. Please try again.');
+      }
+
+      // If "Confirm email" is on in the Supabase project, [signUp] won't
+      // return a session. Try signing in once as a fallback.
+      if (signUp.session == null) {
+        try {
+          await _authService.signInPatientWithMpin(
+            email: email,
+            mpin: _mpin,
+          );
+        } catch (_) {
+          // Sign-in failed too -> almost certainly email-confirmation gate.
+        }
+      }
+
+      final user = _authService.currentUser;
+      if (user == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            duration: Duration(seconds: 6),
+            content: Text(
+              'Account created, but Supabase requires email confirmation. '
+              'Disable "Confirm email" in your Supabase project '
+              '(Authentication → Providers → Email) and try again.',
+            ),
+          ),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      await _patientService.createPatientProfile(
+        userId: user.id,
+        firstName: firstName,
+        middleName: widget.patientData['middleName'] as String?,
+        lastName: lastName,
+        nickname: nickname,
+        suffix: widget.patientData['suffix'] as String?,
+        birthday: birthday,
+        sexAssignedAtBirth: sex,
+        genderIdentity: widget.patientData['genderIdentity'] as String?,
+        email: email,
+      );
+
+      await _patientService.saveMpinAndRecovery(
+        userId: user.id,
+        mpin: _mpin,
+        recoveryPassword: recoveryPassword,
+      );
+
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const PatientMainScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().toLowerCase();
+      String friendly = 'Error creating account: $e';
+      if (msg.contains('already') || msg.contains('registered')) {
+        friendly =
+            'An account already exists with this email. Try logging in instead.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendly)),
+      );
+      setState(() => _isLoading = false);
     }
   }
 
@@ -111,25 +184,24 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const StepIndicator(currentStep: 5, totalSteps: 5),
+              const StepIndicator(currentStep: 4, totalSteps: 4),
               const SizedBox(height: 24),
               Text(
                 'Confirm your MPIN',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onBackground,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Re-enter your MPIN to confirm.',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onBackground.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
               const Spacer(),
-              
-              // PIN Dots
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(4, (index) {
@@ -142,18 +214,23 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
                       shape: BoxShape.circle,
                       color: _errorMsg != null
                           ? theme.colorScheme.error
-                          : isFilled ? theme.colorScheme.primary : theme.colorScheme.surface,
+                          : isFilled
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.surface,
                       border: Border.all(
                         color: _errorMsg != null
                             ? theme.colorScheme.error
-                            : isFilled ? theme.colorScheme.primary : theme.colorScheme.onBackground.withOpacity(0.3),
+                            : isFilled
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.3),
                         width: 2,
                       ),
                     ),
                   );
                 }),
               ),
-              
+
               if (_errorMsg != null) ...[
                 const SizedBox(height: 16),
                 Center(
@@ -166,10 +243,9 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
                   ),
                 ),
               ],
-              
+
               const Spacer(),
-              
-              // Numeric Keypad
+
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -181,15 +257,18 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
                 ),
                 itemCount: 12,
                 itemBuilder: (context, index) {
-                  if (index == 9) return const SizedBox.shrink(); // Empty slot
+                  if (index == 9) return const SizedBox.shrink();
                   if (index == 11) {
                     return InkWell(
                       onTap: _onDeleteTap,
                       customBorder: const CircleBorder(),
-                      child: Icon(Icons.backspace_outlined, color: theme.colorScheme.onBackground),
+                      child: Icon(
+                        Icons.backspace_outlined,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     );
                   }
-                  
+
                   final number = index == 10 ? '0' : '${index + 1}';
                   return InkWell(
                     onTap: () => _onKeypadTap(number),
@@ -197,30 +276,36 @@ class _Step5ConfirmMpinScreenState extends State<Step5ConfirmMpinScreen> {
                     child: Center(
                       child: Text(
                         number,
-                        style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     ),
                   );
                 },
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: (_mpin.length == 4 && !_isLoading) ? _finishSetup : null,
+                  onPressed: (_mpin.length == 4 && !_isLoading)
+                      ? _confirmAndFinish
+                      : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: _isLoading 
-                    ? const SizedBox(
-                        height: 24, 
-                        width: 24, 
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                      )
-                    : const Text('Finish / Create Account'),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Finish Sign-up'),
                 ),
               ),
             ],

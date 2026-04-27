@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:brain_anchor/screens/patient/patient_main_screen.dart';
+import 'package:brain_anchor/screens/auth/role_redirect_screen.dart';
+import 'package:brain_anchor/screens/auth/forgot_mpin_screen.dart';
 import 'package:brain_anchor/theme/app_theme.dart';
 import 'package:brain_anchor/services/auth_service.dart';
-import 'package:brain_anchor/services/patient_service.dart';
 
+/// Patient login: confirm email + 4-digit MPIN.
+///
+/// The Supabase password is derived from the MPIN, so this single screen
+/// completes the login (no separate password screen).
 class PatientLoginMpinScreen extends StatefulWidget {
-  final String phoneNumber;
+  /// Email entered on the previous screen.
+  final String email;
 
-  const PatientLoginMpinScreen({super.key, required this.phoneNumber});
+  const PatientLoginMpinScreen({super.key, required this.email});
 
   @override
   State<PatientLoginMpinScreen> createState() => _PatientLoginMpinScreenState();
@@ -19,7 +24,6 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
   bool _isLoading = false;
 
   final _authService = AuthService();
-  final _patientService = PatientService();
 
   void _onKeypadTap(String value) {
     if (_mpin.length < 4) {
@@ -40,49 +44,46 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
   }
 
   Future<void> _login() async {
-    if (_mpin.length == 4) {
-      setState(() => _isLoading = true);
+    if (_mpin.length != 4) return;
+    setState(() => _isLoading = true);
 
-      try {
-        final user = _authService.currentUser;
-        if (user == null) throw Exception('No authenticated user found.');
-
-        final isValid = await _patientService.verifyMpin(
-          userId: user.id,
-          mpin: _mpin,
-        );
-
-        if (!mounted) return;
-
-        if (isValid) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const PatientMainScreen()),
-            (route) => false,
-          );
-        } else {
-          setState(() {
-            _errorMsg = 'Incorrect MPIN. Please try again.';
-            _mpin = '';
-          });
-        }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
+    try {
+      final response = await _authService.signInPatientWithMpin(
+        email: widget.email,
+        mpin: _mpin,
+      );
+      if (response.user == null) {
+        throw Exception('Invalid email or MPIN.');
       }
+
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const RoleRedirectScreen()),
+        (route) => false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorMsg = 'Incorrect email or MPIN. Please try again.';
+        _mpin = '';
+        _isLoading = false;
+      });
     }
+  }
+
+  String _maskEmail(String email) {
+    final atIndex = email.indexOf('@');
+    if (atIndex <= 1) return email;
+    final first = email.substring(0, 1);
+    final domain = email.substring(atIndex);
+    return '$first***$domain';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final String maskedPhone = widget.phoneNumber.length >= 4 
-        ? widget.phoneNumber.substring(widget.phoneNumber.length - 4) 
-        : 'XXXX';
+    final maskedEmail = _maskEmail(widget.email);
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -120,7 +121,7 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Enter your 4-digit MPIN to access your wellness account ending in $maskedPhone.',
+                'Enter your 4-digit MPIN for $maskedEmail.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: AppTheme.textSecondary,
                   height: 1.5,
@@ -128,10 +129,12 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
-              
-              // PIN Dots Container
+
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(32),
@@ -156,24 +159,31 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                       height: 20,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isFilled ? AppTheme.primaryColor : Colors.white,
+                        color: isFilled
+                            ? AppTheme.primaryColor
+                            : Colors.white,
                         border: Border.all(
-                          color: isFilled ? AppTheme.primaryColor : AppTheme.primaryColor.withValues(alpha: 0.2),
+                          color: isFilled
+                              ? AppTheme.primaryColor
+                              : AppTheme.primaryColor.withValues(alpha: 0.2),
                           width: 2,
                         ),
-                        boxShadow: isFilled ? [
-                          BoxShadow(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          )
-                        ] : null,
+                        boxShadow: isFilled
+                            ? [
+                                BoxShadow(
+                                  color: AppTheme.primaryColor
+                                      .withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
                       ),
                     );
                   }),
                 ),
               ),
-              
+
               if (_errorMsg != null) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -188,15 +198,15 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                 const SizedBox(height: 16),
                 const CircularProgressIndicator(color: AppTheme.primaryColor),
               ],
-              
+
               const SizedBox(height: 24),
-              
-              // Numeric Keypad
+
               Expanded(
                 child: GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
                     childAspectRatio: 1.5,
                     crossAxisSpacing: 16,
@@ -204,7 +214,7 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                   ),
                   itemCount: 12,
                   itemBuilder: (context, index) {
-                    if (index == 9) return const SizedBox.shrink(); // Empty slot
+                    if (index == 9) return const SizedBox.shrink();
                     if (index == 11) {
                       return Material(
                         color: Colors.transparent,
@@ -212,17 +222,19 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                         clipBehavior: Clip.hardEdge,
                         child: InkWell(
                           onTap: _onDeleteTap,
-                          splashColor: AppTheme.errorColor.withValues(alpha: 0.1),
-                          highlightColor: AppTheme.errorColor.withValues(alpha: 0.05),
+                          splashColor:
+                              AppTheme.errorColor.withValues(alpha: 0.1),
+                          highlightColor:
+                              AppTheme.errorColor.withValues(alpha: 0.05),
                           child: const Icon(
-                            Icons.backspace_rounded, 
+                            Icons.backspace_rounded,
                             color: AppTheme.textSecondary,
                             size: 28,
                           ),
                         ),
                       );
                     }
-                    
+
                     final number = index == 10 ? '0' : '${index + 1}';
                     return Material(
                       color: Colors.white,
@@ -230,12 +242,15 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       elevation: 0,
-                      shadowColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      shadowColor:
+                          AppTheme.primaryColor.withValues(alpha: 0.1),
                       clipBehavior: Clip.hardEdge,
                       child: InkWell(
                         onTap: () => _onKeypadTap(number),
-                        highlightColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                        splashColor: AppTheme.primaryColor.withValues(alpha: 0.2),
+                        highlightColor:
+                            AppTheme.primaryColor.withValues(alpha: 0.1),
+                        splashColor:
+                            AppTheme.primaryColor.withValues(alpha: 0.2),
                         child: Center(
                           child: Text(
                             number,
@@ -250,16 +265,18 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                   },
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _mpin.length == 4 ? _login : null,
+                  onPressed:
+                      (_mpin.length == 4 && !_isLoading) ? _login : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryColor,
-                    disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 0.3),
+                    disabledBackgroundColor:
+                        AppTheme.primaryColor.withValues(alpha: 0.3),
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(32),
@@ -272,12 +289,34 @@ class _PatientLoginMpinScreenState extends State<PatientLoginMpinScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: _mpin.length == 4 ? Colors.white : Colors.white.withValues(alpha: 0.8),
+                      color: _mpin.length == 4
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.8),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: _isLoading
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ForgotMpinScreen(email: widget.email),
+                          ),
+                        );
+                      },
+                child: const Text(
+                  'Forgot MPIN?',
+                  style: TextStyle(
+                    color: AppTheme.primaryColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
