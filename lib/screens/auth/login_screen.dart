@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:brain_anchor/screens/auth/role_redirect_screen.dart';
 import 'package:brain_anchor/screens/auth/welcome_screen.dart';
 import 'package:brain_anchor/screens/auth/login_mpin_screen.dart';
@@ -22,11 +22,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _isGoogleLoading = false;
+  bool _rememberMe = false;
   String? _emailWarning;
   String? _passwordWarning;
   final _authService = AuthService();
 
   static final _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+  static const _rememberMeKey = 'remember_me_enabled';
+  static const _rememberedEmailKey = 'remembered_login_email';
+  static const _rememberedRoleKey = 'remembered_login_role';
 
   @override
   void initState() {
@@ -34,6 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _selectedRole = widget.initialRole ?? AppConstants.rolePatient;
     _emailController.addListener(_clearEmailWarningOnEdit);
     _passwordController.addListener(_clearPasswordWarningOnEdit);
+    _restoreRememberedLogin();
   }
 
   @override
@@ -58,6 +63,40 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_passwordWarning != null) {
       setState(() => _passwordWarning = null);
     }
+  }
+
+  Future<void> _restoreRememberedLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(_rememberMeKey) ?? false;
+    final rememberedEmail = prefs.getString(_rememberedEmailKey) ?? '';
+    final rememberedRole = prefs.getString(_rememberedRoleKey);
+    if (!mounted) return;
+
+    setState(() {
+      _rememberMe = enabled;
+      if (enabled && rememberedEmail.isNotEmpty) {
+        _emailController.text = rememberedEmail;
+      }
+      if (enabled &&
+          rememberedRole != null &&
+          (rememberedRole == AppConstants.rolePatient ||
+              rememberedRole == AppConstants.roleDoctor)) {
+        _selectedRole = rememberedRole;
+      }
+    });
+  }
+
+  Future<void> _persistRememberedLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setBool(_rememberMeKey, true);
+      await prefs.setString(_rememberedEmailKey, _emailController.text.trim());
+      await prefs.setString(_rememberedRoleKey, _selectedRole);
+      return;
+    }
+    await prefs.setBool(_rememberMeKey, false);
+    await prefs.remove(_rememberedEmailKey);
+    await prefs.remove(_rememberedRoleKey);
   }
 
   Future<void> _login() async {
@@ -103,6 +142,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
       setState(() => _isLoading = false);
+      await _persistRememberedLogin();
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -141,6 +182,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (response.user == null) throw Exception('Login failed.');
 
+      if (!mounted) return;
+      await _persistRememberedLogin();
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
@@ -319,7 +362,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   errorText: _emailWarning,
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: isPatient ? 8 : 16),
 
               if (!isPatient) ...[
                 TextFormField(
@@ -358,6 +401,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ],
               const SizedBox(height: 16),
+
+              Row(
+                children: [
+                  Checkbox(
+                    value: _rememberMe,
+                    onChanged: (value) {
+                      setState(() => _rememberMe = value ?? false);
+                    },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _rememberMe = !_rememberMe),
+                    child: Text(
+                      'Remember me',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
 
               SizedBox(
                 width: double.infinity,

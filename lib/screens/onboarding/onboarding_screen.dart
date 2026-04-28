@@ -26,9 +26,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'icon': Icons.health_and_safety_outlined,
     },
     {
-      'title': 'For Doctors',
+      'title': 'For Mental Health Providers',
       'description':
-          'Manage your patients efficiently, view real-time health data, and provide telemedicine securely in one centralized app.',
+          'Support your clients with care and clarity. Manage sessions, track emotional progress, and provide secure, compassionate support\u2014all in one place.',
       'icon': Icons.medical_services_outlined,
     },
   ];

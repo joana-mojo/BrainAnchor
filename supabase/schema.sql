@@ -32,9 +32,13 @@ CREATE TABLE IF NOT EXISTS public.patients (
     sex_assigned_at_birth TEXT NOT NULL CHECK (sex_assigned_at_birth IN ('Male', 'Female')),
     gender_identity TEXT,
     email TEXT,
+    avatar_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+ALTER TABLE public.patients
+    ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 -- 3. providers -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.providers (
@@ -105,6 +109,48 @@ CREATE TABLE IF NOT EXISTS public.otp_verifications (
 CREATE INDEX IF NOT EXISTS otp_verifications_phone_idx
     ON public.otp_verifications(phone_number);
 
+-- 7. patient_moods ----------------------------------------------------------
+-- Stores one mood snapshot per patient per day. Home mood check-in and
+-- Mood Journal both read/write this same table so data stays in sync.
+CREATE TABLE IF NOT EXISTS public.patient_moods (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    mood_label TEXT NOT NULL
+        CHECK (mood_label IN ('Amazing', 'Good', 'Okay', 'Sad', 'Stressed')),
+    mood_score INTEGER NOT NULL CHECK (mood_score BETWEEN 1 AND 5),
+    note TEXT,
+    entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    source TEXT NOT NULL DEFAULT 'home'
+        CHECK (source IN ('home', 'journal')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    UNIQUE (user_id, entry_date)
+);
+
+CREATE INDEX IF NOT EXISTS patient_moods_user_date_idx
+    ON public.patient_moods (user_id, entry_date DESC);
+
+-- 8. wellness_checkins ------------------------------------------------------
+-- One Wellness Check-in per user per day. Stores AI summary and suggestions
+-- so the "History" view can show prior check-ins and allow deletion.
+CREATE TABLE IF NOT EXISTS public.wellness_checkins (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    checkin_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ai_summary TEXT NOT NULL DEFAULT '',
+    ai_suggestions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ai_reminder TEXT NOT NULL DEFAULT '',
+    risk_level TEXT NOT NULL DEFAULT 'low'
+        CHECK (risk_level IN ('low', 'moderate', 'high', 'crisis')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    UNIQUE (user_id, checkin_date)
+);
+
+CREATE INDEX IF NOT EXISTS wellness_checkins_user_date_idx
+    ON public.wellness_checkins (user_id, checkin_date DESC);
+
 -- =====================================================================
 -- ROW LEVEL SECURITY
 -- =====================================================================
@@ -115,6 +161,8 @@ ALTER TABLE public.providers           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_documents  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_mpin           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.otp_verifications   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.patient_moods       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wellness_checkins   ENABLE ROW LEVEL SECURITY;
 
 -- profiles ------------------------------------------------------------
 DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
@@ -145,6 +193,15 @@ CREATE POLICY "Providers can insert their own data"
 DROP POLICY IF EXISTS "Providers can read their own data" ON public.providers;
 CREATE POLICY "Providers can read their own data"
     ON public.providers FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Patients can read approved providers" ON public.providers;
+CREATE POLICY "Patients can read approved providers"
+    ON public.providers FOR SELECT USING (
+        approval_status = 'approved' AND EXISTS (
+            SELECT 1
+            FROM public.profiles p
+            WHERE p.id = auth.uid() AND p.role = 'patient'
+        )
+    );
 DROP POLICY IF EXISTS "Providers can update their own data" ON public.providers;
 CREATE POLICY "Providers can update their own data"
     ON public.providers FOR UPDATE USING (auth.uid() = id);
@@ -178,14 +235,52 @@ CREATE POLICY "Users can insert otp logs for themselves"
         auth.uid() = user_id OR user_id IS NULL
     );
 
+-- patient_moods ------------------------------------------------------
+DROP POLICY IF EXISTS "Users can insert their own moods" ON public.patient_moods;
+CREATE POLICY "Users can insert their own moods"
+    ON public.patient_moods FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can read their own moods" ON public.patient_moods;
+CREATE POLICY "Users can read their own moods"
+    ON public.patient_moods FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update their own moods" ON public.patient_moods;
+CREATE POLICY "Users can update their own moods"
+    ON public.patient_moods FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can delete their own moods" ON public.patient_moods;
+CREATE POLICY "Users can delete their own moods"
+    ON public.patient_moods FOR DELETE USING (auth.uid() = user_id);
+
+-- wellness_checkins ---------------------------------------------------
+DROP POLICY IF EXISTS "Users can insert their own wellness checkins" ON public.wellness_checkins;
+CREATE POLICY "Users can insert their own wellness checkins"
+    ON public.wellness_checkins FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can read their own wellness checkins" ON public.wellness_checkins;
+CREATE POLICY "Users can read their own wellness checkins"
+    ON public.wellness_checkins FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update their own wellness checkins" ON public.wellness_checkins;
+CREATE POLICY "Users can update their own wellness checkins"
+    ON public.wellness_checkins FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can delete their own wellness checkins" ON public.wellness_checkins;
+CREATE POLICY "Users can delete their own wellness checkins"
+    ON public.wellness_checkins FOR DELETE USING (auth.uid() = user_id);
+
 -- =====================================================================
 -- STORAGE
 -- =====================================================================
 -- Run this once in the Supabase Dashboard, or use the bucket policies below.
 --
 --   Storage > New bucket > name = 'provider_documents' > Private
+--   Storage > New bucket > name = 'patient_avatars' > Public
 --
 -- Then run the policies below so providers can upload to their own folder.
+
+-- Ensure required buckets exist (safe to re-run).
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('provider_documents', 'provider_documents', false)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('patient_avatars', 'patient_avatars', true)
+ON CONFLICT (id) DO NOTHING;
 
 -- Allow authenticated providers to upload only into their own folder:
 --   provider_documents/<auth.uid()>/...
@@ -204,6 +299,33 @@ CREATE POLICY "Providers can read their own license"
         bucket_id = 'provider_documents'
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
+
+-- Allow patients to upload avatar images into their own folder:
+--   patient_avatars/<auth.uid()>/...
+DROP POLICY IF EXISTS "Patients can upload their own avatar" ON storage.objects;
+CREATE POLICY "Patients can upload their own avatar"
+    ON storage.objects FOR INSERT TO authenticated
+    WITH CHECK (
+        bucket_id = 'patient_avatars'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+    );
+
+DROP POLICY IF EXISTS "Patients can update their own avatar" ON storage.objects;
+CREATE POLICY "Patients can update their own avatar"
+    ON storage.objects FOR UPDATE TO authenticated
+    USING (
+        bucket_id = 'patient_avatars'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+    )
+    WITH CHECK (
+        bucket_id = 'patient_avatars'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+    );
+
+DROP POLICY IF EXISTS "Public can read patient avatars" ON storage.objects;
+CREATE POLICY "Public can read patient avatars"
+    ON storage.objects FOR SELECT TO public
+    USING (bucket_id = 'patient_avatars');
 
 -- =====================================================================
 -- HELPFUL TRIGGERS
@@ -236,6 +358,16 @@ CREATE TRIGGER providers_set_updated_at
 DROP TRIGGER IF EXISTS user_mpin_set_updated_at ON public.user_mpin;
 CREATE TRIGGER user_mpin_set_updated_at
     BEFORE UPDATE ON public.user_mpin
+    FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+DROP TRIGGER IF EXISTS patient_moods_set_updated_at ON public.patient_moods;
+CREATE TRIGGER patient_moods_set_updated_at
+    BEFORE UPDATE ON public.patient_moods
+    FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+DROP TRIGGER IF EXISTS wellness_checkins_set_updated_at ON public.wellness_checkins;
+CREATE TRIGGER wellness_checkins_set_updated_at
+    BEFORE UPDATE ON public.wellness_checkins
     FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
 -- =====================================================================
@@ -375,3 +507,80 @@ $$;
 REVOKE ALL ON FUNCTION public.provider_email_exists(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.provider_email_exists(TEXT)
     TO anon, authenticated;
+
+-- =====================================================================
+-- MENTAL HEALTH CLINICS DIRECTORY
+-- =====================================================================
+-- Curated directory of real mental-health clinics shown to patients in
+-- the "Book Consultation > Clinics" tab. Maintained by admins (or a
+-- future provider-submission flow). Public READ so anyone using the app
+-- can discover them; writes go through the admin role only.
+--
+-- We intentionally don't depend on PostGIS here: distance is computed
+-- client-side by the Flutter app using the haversine formula in
+-- LocationService. Coordinate pair ranges keep bad data out.
+
+CREATE TABLE IF NOT EXISTS public.mental_health_clinics (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    address TEXT,
+    city TEXT,
+    region TEXT,
+    country TEXT NOT NULL DEFAULT 'Philippines',
+    latitude DOUBLE PRECISION NOT NULL
+        CHECK (latitude BETWEEN -90 AND 90),
+    longitude DOUBLE PRECISION NOT NULL
+        CHECK (longitude BETWEEN -180 AND 180),
+    specialty TEXT,
+    phone TEXT,
+    website TEXT,
+    rating NUMERIC(3, 2) CHECK (rating IS NULL OR (rating BETWEEN 0 AND 5)),
+    review_count INTEGER NOT NULL DEFAULT 0
+        CHECK (review_count >= 0),
+    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE
+        DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE
+        DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- Speeds up distance queries that bound by a lat/lon box first.
+CREATE INDEX IF NOT EXISTS mental_health_clinics_lat_lon_idx
+    ON public.mental_health_clinics (latitude, longitude);
+
+-- Speeds up name-based search.
+CREATE INDEX IF NOT EXISTS mental_health_clinics_name_idx
+    ON public.mental_health_clinics (LOWER(name));
+
+ALTER TABLE public.mental_health_clinics ENABLE ROW LEVEL SECURITY;
+
+-- Anyone (including unauthenticated visitors) can browse the directory.
+DROP POLICY IF EXISTS "Anyone can read mental health clinics"
+    ON public.mental_health_clinics;
+CREATE POLICY "Anyone can read mental health clinics"
+    ON public.mental_health_clinics FOR SELECT
+    USING (TRUE);
+
+-- Only admins (profiles.role = 'admin') can insert / update / delete.
+DROP POLICY IF EXISTS "Admins can write mental health clinics"
+    ON public.mental_health_clinics;
+CREATE POLICY "Admins can write mental health clinics"
+    ON public.mental_health_clinics FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles p
+            WHERE p.id = auth.uid() AND p.role = 'admin'
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.profiles p
+            WHERE p.id = auth.uid() AND p.role = 'admin'
+        )
+    );
+
+DROP TRIGGER IF EXISTS mental_health_clinics_set_updated_at
+    ON public.mental_health_clinics;
+CREATE TRIGGER mental_health_clinics_set_updated_at
+    BEFORE UPDATE ON public.mental_health_clinics
+    FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();

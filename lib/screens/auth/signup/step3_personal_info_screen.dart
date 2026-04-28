@@ -1,8 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:brain_anchor/screens/auth/signup/step4_create_mpin_screen.dart';
+import 'package:brain_anchor/widgets/step_indicator.dart';
 import 'package:brain_anchor/widgets/terms_and_privacy_dialog.dart';
+
+/// Forces the first letter of every "word" (delimited by space, hyphen, or
+/// apostrophe) to be uppercase, while preserving the user's casing for
+/// every other character. Unlike `TextCapitalization.words` \u2014 which is
+/// only a keyboard hint the user can ignore \u2014 this formatter also
+/// rewrites paste, autocomplete, and lowercase typing in real time.
+///
+/// Examples:
+///   "ahron leo"        -> "Ahron Leo"
+///   "mary-jane"        -> "Mary-Jane"
+///   "o'brien"          -> "O'Brien"
+///   "McDonald"         -> "McDonald"  (mid-word casing preserved)
+class _CapitalizeWordsFormatter extends TextInputFormatter {
+  static const _wordBreaks = {' ', '-', '\''};
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+
+    final buffer = StringBuffer();
+    bool capitalizeNext = true;
+    for (var i = 0; i < text.length; i++) {
+      final ch = text[i];
+      if (_wordBreaks.contains(ch)) {
+        buffer.write(ch);
+        capitalizeNext = true;
+      } else if (capitalizeNext) {
+        buffer.write(ch.toUpperCase());
+        capitalizeNext = false;
+      } else {
+        buffer.write(ch);
+      }
+    }
+
+    final newText = buffer.toString();
+    if (newText == text) return newValue;
+    // Length is unchanged (we only swap case), so the cursor selection is
+    // still valid and we can keep it as-is.
+    return TextEditingValue(
+      text: newText,
+      selection: newValue.selection,
+      composing: TextRange.empty,
+    );
+  }
+}
 
 /// Visible signup step 2 of 4: personal information + recovery password.
 ///
@@ -196,23 +247,16 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: const BackButton(color: Colors.black87),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(
-            value: 0.5, // 2 of 4
-            backgroundColor: Colors.grey.shade200,
-            valueColor:
-                AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-          ),
-        ),
       ),
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const StepIndicator(currentStep: 2, totalSteps: 4),
+              const SizedBox(height: 8),
               Text(
                 'Personal Information',
                 style: theme.textTheme.headlineSmall?.copyWith(
@@ -233,6 +277,8 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                 'First Name *',
                 TextFormField(
                   controller: _firstNameController,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [_CapitalizeWordsFormatter()],
                   decoration: _commonInputDecoration('First Name'),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -241,6 +287,8 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                 'Middle name (optional)',
                 TextFormField(
                   controller: _middleNameController,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [_CapitalizeWordsFormatter()],
                   decoration: _commonInputDecoration('Middle Name'),
                 ),
               ),
@@ -248,6 +296,8 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                 'Last Name *',
                 TextFormField(
                   controller: _lastNameController,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [_CapitalizeWordsFormatter()],
                   decoration: _commonInputDecoration('Last Name'),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -260,6 +310,8 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                       'Nickname *',
                       TextFormField(
                         controller: _nicknameController,
+                        textCapitalization: TextCapitalization.words,
+                        inputFormatters: [_CapitalizeWordsFormatter()],
                         decoration: _commonInputDecoration('Nickname'),
                         onChanged: (_) => setState(() {}),
                       ),
