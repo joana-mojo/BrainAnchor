@@ -9,9 +9,22 @@ Future<void> main() async {
 
   await dotenv.load(fileName: ".env");
 
+  final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ??
+      dotenv.env['SUPABASE_URL'] ??
+      '';
+  final supabaseAnonKey = dotenv.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ??
+      dotenv.env['SUPABASE_ANON_KEY'] ??
+      '';
+
+  assert(
+    supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty,
+    'Missing Supabase credentials. Add NEXT_PUBLIC_SUPABASE_URL and '
+    'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY to your .env file.',
+  );
+
   await Supabase.initialize(
-    url: 'https://thuntsxzzfhbsliwlqte.supabase.co',
-    anonKey: 'sb_publishable_6lFOmQnnvVix_EhchjAMTQ_CEKrM6Dp',
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
 
   runApp(const BrainAnchorApp());

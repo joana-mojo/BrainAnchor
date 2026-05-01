@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:brain_anchor/core/constants.dart';
-import 'package:brain_anchor/screens/auth/signup/step1_mobile_screen.dart';
+import 'package:brain_anchor/screens/auth/signup/step1_email_screen.dart';
 import 'package:brain_anchor/screens/auth/doctor_signup_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
@@ -58,7 +58,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const Step1MobileScreen(),
+                      builder: (context) => const Step1EmailScreen(),
                     ),
                   ).then((_) {
                     if (mounted) {

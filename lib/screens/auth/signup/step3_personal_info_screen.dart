@@ -1,44 +1,108 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:brain_anchor/widgets/step_indicator.dart';
 import 'package:brain_anchor/screens/auth/signup/step4_create_mpin_screen.dart';
+import 'package:brain_anchor/widgets/step_indicator.dart';
 import 'package:brain_anchor/widgets/terms_and_privacy_dialog.dart';
 
-class Step3PersonalInfoScreen extends StatefulWidget {
-  const Step3PersonalInfoScreen({super.key});
+/// Forces the first letter of every "word" (delimited by space, hyphen, or
+/// apostrophe) to be uppercase, while preserving the user's casing for
+/// every other character. Unlike `TextCapitalization.words` \u2014 which is
+/// only a keyboard hint the user can ignore \u2014 this formatter also
+/// rewrites paste, autocomplete, and lowercase typing in real time.
+///
+/// Examples:
+///   "ahron leo"        -> "Ahron Leo"
+///   "mary-jane"        -> "Mary-Jane"
+///   "o'brien"          -> "O'Brien"
+///   "McDonald"         -> "McDonald"  (mid-word casing preserved)
+class _CapitalizeWordsFormatter extends TextInputFormatter {
+  static const _wordBreaks = {' ', '-', '\''};
 
   @override
-  State<Step3PersonalInfoScreen> createState() => _Step3PersonalInfoScreenState();
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+
+    final buffer = StringBuffer();
+    bool capitalizeNext = true;
+    for (var i = 0; i < text.length; i++) {
+      final ch = text[i];
+      if (_wordBreaks.contains(ch)) {
+        buffer.write(ch);
+        capitalizeNext = true;
+      } else if (capitalizeNext) {
+        buffer.write(ch.toUpperCase());
+        capitalizeNext = false;
+      } else {
+        buffer.write(ch);
+      }
+    }
+
+    final newText = buffer.toString();
+    if (newText == text) return newValue;
+    // Length is unchanged (we only swap case), so the cursor selection is
+    // still valid and we can keep it as-is.
+    return TextEditingValue(
+      text: newText,
+      selection: newValue.selection,
+      composing: TextRange.empty,
+    );
+  }
+}
+
+/// Visible signup step 2 of 4: personal information + recovery password.
+///
+/// This screen only collects data — nothing is written to Supabase here.
+/// The actual sign-up happens after the MPIN is confirmed (step 4).
+class Step3PersonalInfoScreen extends StatefulWidget {
+  /// Email collected in step 1. When set, the email field is hidden.
+  final String? prefillEmail;
+
+  const Step3PersonalInfoScreen({super.key, this.prefillEmail});
+
+  @override
+  State<Step3PersonalInfoScreen> createState() =>
+      _Step3PersonalInfoScreenState();
 }
 
 class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
-  final TextEditingController _firstNameController = TextEditingController();
-  final TextEditingController _middleNameController = TextEditingController();
-  final TextEditingController _lastNameController = TextEditingController();
-  final TextEditingController _nicknameController = TextEditingController();
-  final TextEditingController _suffixController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  
+  final _firstNameController = TextEditingController();
+  final _middleNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _nicknameController = TextEditingController();
+  final _suffixController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
   DateTime? _selectedDate;
   String? _selectedSex;
   String? _selectedGenderId;
-  
-  bool _sendOffers = false;
+
   bool _agreeToPolicy = false;
+  bool _passwordVisible = false;
+  bool _confirmVisible = false;
 
   late TapGestureRecognizer _termsRecognizer;
   late TapGestureRecognizer _privacyRecognizer;
 
+  static const int _minPasswordLen = 8;
+
   @override
   void initState() {
     super.initState();
-    _termsRecognizer = TapGestureRecognizer()..onTap = () {
-      TermsAndPrivacyDialogs.showTermsOfUse(context);
-    };
-    _privacyRecognizer = TapGestureRecognizer()..onTap = () {
-      TermsAndPrivacyDialogs.showPrivacyPolicy(context);
-    };
+    if (widget.prefillEmail != null) {
+      _emailController.text = widget.prefillEmail!;
+    }
+    _termsRecognizer = TapGestureRecognizer()
+      ..onTap = () => TermsAndPrivacyDialogs.showTermsOfUse(context);
+    _privacyRecognizer = TapGestureRecognizer()
+      ..onTap = () => TermsAndPrivacyDialogs.showPrivacyPolicy(context);
   }
 
   @override
@@ -51,53 +115,86 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
     _nicknameController.dispose();
     _suffixController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
     );
     if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
+      setState(() => _selectedDate = picked);
     }
   }
 
   bool _isFormValid() {
-    return _firstNameController.text.isNotEmpty &&
-        _lastNameController.text.isNotEmpty &&
-        _nicknameController.text.isNotEmpty &&
+    final passwordOk =
+        _passwordController.text.length >= _minPasswordLen &&
+            _confirmPasswordController.text == _passwordController.text;
+
+    return _firstNameController.text.trim().isNotEmpty &&
+        _lastNameController.text.trim().isNotEmpty &&
+        _nicknameController.text.trim().isNotEmpty &&
         _selectedDate != null &&
         _selectedSex != null &&
+        passwordOk &&
         _agreeToPolicy;
   }
 
-  void _nextStep() {
-    if (_isFormValid()) {
-      final patientData = {
-        'firstName': _firstNameController.text.trim(),
-        'middleName': _middleNameController.text.trim().isEmpty ? null : _middleNameController.text.trim(),
-        'lastName': _lastNameController.text.trim(),
-        'nickname': _nicknameController.text.trim(),
-        'suffix': _suffixController.text.trim().isEmpty ? null : _suffixController.text.trim(),
-        'birthday': _selectedDate,
-        'sexAssignedAtBirth': _selectedSex,
-        'genderIdentity': _selectedGenderId,
-        'email': _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
-      };
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => Step4CreateMpinScreen(patientData: patientData),
-        ),
-      );
+  String? _passwordError() {
+    final p = _passwordController.text;
+    final c = _confirmPasswordController.text;
+    if (p.isEmpty) return null;
+    if (p.length < _minPasswordLen) {
+      return 'Password must be at least $_minPasswordLen characters.';
     }
+    if (c.isNotEmpty && c != p) return 'Passwords don\'t match.';
+    return null;
+  }
+
+  void _next() {
+    if (!_isFormValid()) return;
+
+    final email = widget.prefillEmail ??
+        (_emailController.text.trim().isEmpty
+            ? null
+            : _emailController.text.trim());
+
+    if (email == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter an email address.')),
+      );
+      return;
+    }
+
+    final patientData = <String, dynamic>{
+      'email': email,
+      'recoveryPassword': _passwordController.text,
+      'firstName': _firstNameController.text.trim(),
+      'middleName': _middleNameController.text.trim().isEmpty
+          ? null
+          : _middleNameController.text.trim(),
+      'lastName': _lastNameController.text.trim(),
+      'nickname': _nicknameController.text.trim(),
+      'suffix': _suffixController.text.trim().isEmpty
+          ? null
+          : _suffixController.text.trim(),
+      'birthday': _selectedDate,
+      'sexAssignedAtBirth': _selectedSex,
+      'genderIdentity': _selectedGenderId,
+    };
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Step4CreateMpinScreen(patientData: patientData),
+      ),
+    );
   }
 
   Widget _buildLabeledField(String label, Widget child) {
@@ -119,7 +216,8 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
     return InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       filled: true,
       fillColor: Colors.white,
       suffixIcon: suffixIcon,
@@ -133,7 +231,8 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
+        borderSide:
+            BorderSide(color: Theme.of(context).colorScheme.primary),
       ),
     );
   }
@@ -141,28 +240,23 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final passwordError = _passwordError();
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: const BackButton(color: Colors.black87),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(
-            value: 0.6, // 3 out of 5
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-          ),
-        ),
       ),
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const StepIndicator(currentStep: 2, totalSteps: 4),
+              const SizedBox(height: 8),
               Text(
                 'Personal Information',
                 style: theme.textTheme.headlineSmall?.copyWith(
@@ -178,33 +272,36 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               _buildLabeledField(
                 'First Name *',
                 TextFormField(
                   controller: _firstNameController,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [_CapitalizeWordsFormatter()],
                   decoration: _commonInputDecoration('First Name'),
-                  onChanged: (_) => setState((){}),
+                  onChanged: (_) => setState(() {}),
                 ),
               ),
-              
               _buildLabeledField(
                 'Middle name (optional)',
                 TextFormField(
                   controller: _middleNameController,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [_CapitalizeWordsFormatter()],
                   decoration: _commonInputDecoration('Middle Name'),
                 ),
               ),
-              
               _buildLabeledField(
                 'Last Name *',
                 TextFormField(
                   controller: _lastNameController,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [_CapitalizeWordsFormatter()],
                   decoration: _commonInputDecoration('Last Name'),
-                  onChanged: (_) => setState((){}),
+                  onChanged: (_) => setState(() {}),
                 ),
               ),
-              
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -213,8 +310,10 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                       'Nickname *',
                       TextFormField(
                         controller: _nicknameController,
+                        textCapitalization: TextCapitalization.words,
+                        inputFormatters: [_CapitalizeWordsFormatter()],
                         decoration: _commonInputDecoration('Nickname'),
-                        onChanged: (_) => setState((){}),
+                        onChanged: (_) => setState(() {}),
                       ),
                     ),
                   ),
@@ -224,69 +323,160 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                       'Suffix (optional)',
                       TextFormField(
                         controller: _suffixController,
-                        decoration: _commonInputDecoration('ex. Jr., I, II, III, Sr.'),
+                        decoration: _commonInputDecoration(
+                          'ex. Jr., I, II, III, Sr.',
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-              
               _buildLabeledField(
                 'Birthday *',
                 InkWell(
                   onTap: () => _selectDate(context),
                   child: InputDecorator(
                     decoration: _commonInputDecoration(
-                      'MM/DD/YYYY', 
-                      suffixIcon: Icon(Icons.calendar_today_outlined, color: theme.colorScheme.primary),
+                      'MM/DD/YYYY',
+                      suffixIcon: Icon(
+                        Icons.calendar_today_outlined,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                     child: Text(
-                      _selectedDate == null 
-                        ? 'MM/DD/YYYY' 
-                        : DateFormat('MM/dd/yyyy').format(_selectedDate!),
+                      _selectedDate == null
+                          ? 'MM/DD/YYYY'
+                          : DateFormat('MM/dd/yyyy').format(_selectedDate!),
                       style: TextStyle(
-                        color: _selectedDate == null ? Colors.grey.shade400 : Colors.black87,
+                        color: _selectedDate == null
+                            ? Colors.grey.shade400
+                            : Colors.black87,
                         fontSize: 14,
                       ),
                     ),
                   ),
                 ),
               ),
-              
               _buildLabeledField(
                 'Sex assigned at birth *',
                 DropdownButtonFormField<String>(
                   decoration: _commonInputDecoration('Select from the options'),
                   icon: const Icon(Icons.keyboard_arrow_down),
-                  items: ['Male', 'Female'].map((g) {
-                    return DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(fontSize: 14)));
-                  }).toList(),
+                  items: ['Male', 'Female']
+                      .map((g) => DropdownMenuItem(
+                            value: g,
+                            child: Text(g, style: const TextStyle(fontSize: 14)),
+                          ))
+                      .toList(),
                   onChanged: (val) => setState(() => _selectedSex = val),
                 ),
               ),
-              
               _buildLabeledField(
                 'Gender identity (optional)',
                 DropdownButtonFormField<String>(
                   decoration: _commonInputDecoration('Select from the options'),
                   icon: const Icon(Icons.keyboard_arrow_down),
-                  items: ['Male', 'Female', 'Non-binary', 'Transgender', 'Other', 'Prefer not to say'].map((g) {
-                    return DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(fontSize: 14)));
-                  }).toList(),
+                  items: [
+                    'Male',
+                    'Female',
+                    'Non-binary',
+                    'Transgender',
+                    'Other',
+                    'Prefer not to say',
+                  ]
+                      .map((g) => DropdownMenuItem(
+                            value: g,
+                            child: Text(g, style: const TextStyle(fontSize: 14)),
+                          ))
+                      .toList(),
                   onChanged: (val) => setState(() => _selectedGenderId = val),
                 ),
               ),
-              
-              _buildLabeledField(
-                'Email address (optional)',
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: _commonInputDecoration('ex. name@email.com'),
+              if (widget.prefillEmail == null)
+                _buildLabeledField(
+                  'Email address *',
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration:
+                        _commonInputDecoration('ex. name@email.com'),
+                  ),
+                ),
+
+              const SizedBox(height: 8),
+              Text(
+                'Recovery password',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
-              
+              const SizedBox(height: 4),
+              Text(
+                'You\'ll log in with your MPIN, but if you ever forget it '
+                'we\'ll use this password to let you set a new one.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.grey.shade600,
+                ),
+              ),
               const SizedBox(height: 16),
+
+              _buildLabeledField(
+                'Password *',
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: !_passwordVisible,
+                  onChanged: (_) => setState(() {}),
+                  decoration: _commonInputDecoration(
+                    'At least $_minPasswordLen characters',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _passwordVisible
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: Colors.grey.shade600,
+                      ),
+                      onPressed: () => setState(
+                        () => _passwordVisible = !_passwordVisible,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              _buildLabeledField(
+                'Confirm password *',
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: !_confirmVisible,
+                  onChanged: (_) => setState(() {}),
+                  decoration: _commonInputDecoration(
+                    'Re-enter your password',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _confirmVisible
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: Colors.grey.shade600,
+                      ),
+                      onPressed: () =>
+                          setState(() => _confirmVisible = !_confirmVisible),
+                    ),
+                  ),
+                ),
+              ),
+              if (passwordError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    passwordError,
+                    style: TextStyle(
+                      color: theme.colorScheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 8),
               Text(
                 'Consent',
                 style: theme.textTheme.titleLarge?.copyWith(
@@ -295,9 +485,7 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              
 
-              
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -307,7 +495,8 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                     child: Checkbox(
                       value: _agreeToPolicy,
                       activeColor: theme.colorScheme.primary,
-                      onChanged: (val) => setState(() => _agreeToPolicy = val ?? false),
+                      onChanged: (val) =>
+                          setState(() => _agreeToPolicy = val ?? false),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -345,13 +534,15 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                 ],
               ),
               const SizedBox(height: 32),
-              
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isFormValid() ? _nextStep : null,
+                  onPressed: _isFormValid() ? _next : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.primary.withOpacity(_isFormValid() ? 1.0 : 0.5),
+                    backgroundColor: theme.colorScheme.primary.withValues(
+                      alpha: _isFormValid() ? 1.0 : 0.5,
+                    ),
                     foregroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -359,7 +550,13 @@ class _Step3PersonalInfoScreenState extends State<Step3PersonalInfoScreen> {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: const Text('Next', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Next',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),

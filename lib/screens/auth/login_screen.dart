@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:brain_anchor/screens/doctor/doctor_main_screen.dart';
-import 'package:brain_anchor/screens/auth/login_mpin_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:brain_anchor/screens/auth/role_redirect_screen.dart';
 import 'package:brain_anchor/screens/auth/welcome_screen.dart';
+import 'package:brain_anchor/screens/auth/login_mpin_screen.dart';
 import 'package:brain_anchor/core/constants.dart';
-
 import 'package:brain_anchor/services/auth_service.dart';
-import 'package:brain_anchor/services/provider_service.dart';
-import 'package:brain_anchor/screens/auth/login_otp_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final String? initialRole;
@@ -20,110 +17,226 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordVisible = false;
   late String _selectedRole;
-  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  
+
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _rememberMe = false;
+  String? _emailWarning;
+  String? _passwordWarning;
   final _authService = AuthService();
-  final _providerService = ProviderService();
+
+  static final _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+  static const _rememberMeKey = 'remember_me_enabled';
+  static const _rememberedEmailKey = 'remembered_login_email';
+  static const _rememberedRoleKey = 'remembered_login_role';
 
   @override
   void initState() {
     super.initState();
     _selectedRole = widget.initialRole ?? AppConstants.rolePatient;
+    _emailController.addListener(_clearEmailWarningOnEdit);
+    _passwordController.addListener(_clearPasswordWarningOnEdit);
+    _restoreRememberedLogin();
+  }
+
+  @override
+  void dispose() {
+    _emailController.removeListener(_clearEmailWarningOnEdit);
+    _passwordController.removeListener(_clearPasswordWarningOnEdit);
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  /// Clears the "email not registered" warning as soon as the user edits
+  /// the email so a stale message doesn't sit on the form.
+  void _clearEmailWarningOnEdit() {
+    if (_emailWarning != null) {
+      setState(() => _emailWarning = null);
+    }
+  }
+
+  /// Clears the password warning as soon as the user edits the password.
+  void _clearPasswordWarningOnEdit() {
+    if (_passwordWarning != null) {
+      setState(() => _passwordWarning = null);
+    }
+  }
+
+  Future<void> _restoreRememberedLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(_rememberMeKey) ?? false;
+    final rememberedEmail = prefs.getString(_rememberedEmailKey) ?? '';
+    final rememberedRole = prefs.getString(_rememberedRoleKey);
+    if (!mounted) return;
+
+    setState(() {
+      _rememberMe = enabled;
+      if (enabled && rememberedEmail.isNotEmpty) {
+        _emailController.text = rememberedEmail;
+      }
+      if (enabled &&
+          rememberedRole != null &&
+          (rememberedRole == AppConstants.rolePatient ||
+              rememberedRole == AppConstants.roleDoctor)) {
+        _selectedRole = rememberedRole;
+      }
+    });
+  }
+
+  Future<void> _persistRememberedLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setBool(_rememberMeKey, true);
+      await prefs.setString(_rememberedEmailKey, _emailController.text.trim());
+      await prefs.setString(_rememberedRoleKey, _selectedRole);
+      return;
+    }
+    await prefs.setBool(_rememberMeKey, false);
+    await prefs.remove(_rememberedEmailKey);
+    await prefs.remove(_rememberedRoleKey);
   }
 
   Future<void> _login() async {
-    setState(() => _isLoading = true);
+    final isPatient = _selectedRole == AppConstants.rolePatient;
+    final email = _emailController.text.trim();
 
-    try {
-      if (_selectedRole == AppConstants.rolePatient) {
-        // Patient Flow: Send OTP then verify
-        final phone = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
-        if (phone.length == 10) {
-          final fullPhoneNumber = '+63$phone';
-          await _authService.signInWithOtp(fullPhoneNumber);
-          
-          if (!mounted) return;
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => LoginOtpScreen(phoneNumber: fullPhoneNumber),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please enter a valid 10-digit mobile number.')),
-          );
-        }
-      } else {
-        // Doctor Flow: Email/Password
-        final authResponse = await _authService.signInWithPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
+    setState(() {
+      _emailWarning = null;
+      _passwordWarning = null;
+    });
 
-        final user = authResponse.user;
-        if (user == null) throw Exception('Login failed.');
+    if (email.isEmpty || !_emailRegex.hasMatch(email)) {
+      setState(() => _emailWarning = 'Please enter a valid email address.');
+      return;
+    }
 
-        // Verify role and status
-        final role = await _authService.getCurrentUserRole();
-        if (role != 'provider') throw Exception('Invalid role for this login.');
-
-        final status = await _providerService.getProviderStatus(user.id);
-        
+    if (isPatient) {
+      setState(() => _isLoading = true);
+      try {
+        final exists = await _authService.isPatientEmailRegistered(email);
         if (!mounted) return;
-        
-        if (status == 'approved') {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const DoctorMainScreen()),
-            (route) => false,
-          );
-        } else if (status == 'pending') {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Pending Approval'),
-              content: const Text('Your account is currently under review. Please wait for approval.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _authService.signOut();
-                    Navigator.pop(context);
-                  },
-                  child: const Text('OK'),
-                )
-              ],
-            ),
-          );
-        } else if (status == 'rejected') {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Account Rejected'),
-              content: const Text('Your provider registration was rejected.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _authService.signOut();
-                    Navigator.pop(context);
-                  },
-                  child: const Text('OK'),
-                )
-              ],
-            ),
-          );
+        if (!exists) {
+          setState(() {
+            _emailWarning =
+                'No patient account found with this email. '
+                'Please sign up first.';
+            _isLoading = false;
+          });
+          return;
         }
+      } catch (e) {
+        // Surface the real error in debug builds so misconfigured RPCs
+        // (e.g. the function not yet deployed to Supabase) are obvious.
+        debugPrint('isPatientEmailRegistered failed: $e');
+        if (!mounted) return;
+        setState(() {
+          _emailWarning =
+              'Could not verify email: ${_shortError(e)}';
+          _isLoading = false;
+        });
+        return;
       }
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      await _persistRememberedLogin();
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PatientLoginMpinScreen(email: email),
+        ),
+      );
+      return;
+    }
+
+    // ---- Provider (doctor) login: email + password ----
+    final password = _passwordController.text;
+    if (password.isEmpty) {
+      setState(() => _passwordWarning = 'Please enter your password.');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    bool emailVerified = false;
+    try {
+      final exists = await _authService.isProviderEmailRegistered(email);
+      if (!mounted) return;
+      if (!exists) {
+        setState(() {
+          _emailWarning =
+              'No provider account found with this email. '
+              'Please sign up first.';
+          _isLoading = false;
+        });
+        return;
+      }
+      emailVerified = true;
+
+      final response = await _authService.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      if (response.user == null) throw Exception('Login failed.');
+
+      if (!mounted) return;
+      await _persistRememberedLogin();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const RoleRedirectScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      debugPrint('Provider login failed: $e');
+      if (!mounted) return;
+      if (!emailVerified) {
+        // The RPC itself failed (e.g. function missing in Supabase).
+        setState(() {
+          _emailWarning =
+              'Could not verify email: ${_shortError(e)}';
+          _isLoading = false;
+        });
+      } else {
+        // Email is real, so the failure is almost certainly the password.
+        setState(() {
+          _passwordWarning = 'Incorrect password. Please try again.';
+          _isLoading = false;
+        });
+      }
+    } finally {
+      if (mounted && _isLoading) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Returns a short, user-readable summary of a thrown exception.
+  /// Falls back to the type name if we can't pull a `message` field.
+  String _shortError(Object e) {
+    final s = e.toString();
+    if (s.length > 120) return '${s.substring(0, 117)}...';
+    return s;
+  }
+
+  Future<void> _continueWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    try {
+      await _authService.signInWithGoogle();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const RoleRedirectScreen()),
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login Error: $e')),
+        SnackBar(content: Text('Google Sign-In failed: $e')),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -141,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
           onPressed: () {
             Navigator.pushAndRemoveUntil(
               context,
-              MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+              MaterialPageRoute(builder: (_) => const WelcomeScreen()),
               (route) => false,
             );
           },
@@ -162,20 +275,21 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Login to access your safe space.',
+                isPatient
+                    ? 'Login with your email and 4-digit MPIN.'
+                    : 'Login with your email and password.',
                 style: theme.textTheme.titleMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(height: 32),
 
-              // Role Toggle
               Container(
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: theme.colorScheme.primary.withOpacity(0.2),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
                   ),
                 ),
                 padding: const EdgeInsets.all(4),
@@ -183,11 +297,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => setState(() => _selectedRole = AppConstants.rolePatient),
+                        onTap: () => setState(
+                          () => _selectedRole = AppConstants.rolePatient,
+                        ),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
-                            color: isPatient ? theme.colorScheme.primary : Colors.transparent,
+                            color: isPatient
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           alignment: Alignment.center,
@@ -195,7 +313,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Patient',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: isPatient ? Colors.white : theme.colorScheme.primary,
+                              color: isPatient
+                                  ? Colors.white
+                                  : theme.colorScheme.primary,
                             ),
                           ),
                         ),
@@ -203,11 +323,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => setState(() => _selectedRole = AppConstants.roleDoctor),
+                        onTap: () => setState(
+                          () => _selectedRole = AppConstants.roleDoctor,
+                        ),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
-                            color: !isPatient ? theme.colorScheme.primary : Colors.transparent,
+                            color: !isPatient
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           alignment: Alignment.center,
@@ -215,7 +339,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Doctor',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: !isPatient ? Colors.white : theme.colorScheme.primary,
+                              color: !isPatient
+                                  ? Colors.white
+                                  : theme.colorScheme.primary,
                             ),
                           ),
                         ),
@@ -226,81 +352,40 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 32),
 
-              if (isPatient) ...[
-                // Phone Number Field for Patient
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Text(
-                        '+63',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(10),
-                        ],
-                        style: theme.textTheme.titleMedium,
-                        decoration: InputDecoration(
-                          hintText: '999 123 4567',
-                          hintStyle: theme.textTheme.titleMedium?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.3),
-                          ),
-                          prefixIcon: const Icon(Icons.phone_outlined),
-                        ),
-                      ),
-                    ),
-                  ],
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                decoration: InputDecoration(
+                  hintText: 'Email address',
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  errorText: _emailWarning,
                 ),
-                const SizedBox(height: 32),
-              ] else ...[
-                // Email and Password Fields for Doctor
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    hintText: 'Email address',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                ),
-                const SizedBox(height: 16),
+              ),
+              SizedBox(height: isPatient ? 8 : 16),
 
+              if (!isPatient) ...[
                 TextFormField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
+                  autofillHints: const [AutofillHints.password],
                   decoration: InputDecoration(
                     hintText: 'Password',
                     prefixIcon: const Icon(Icons.lock_outline),
+                    errorText: _passwordWarning,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _isPasswordVisible
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
+                      onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Forgot Password
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
@@ -314,31 +399,57 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
               ],
+              const SizedBox(height: 16),
 
-              // Login Button
+              Row(
+                children: [
+                  Checkbox(
+                    value: _rememberMe,
+                    onChanged: (value) {
+                      setState(() => _rememberMe = value ?? false);
+                    },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _rememberMe = !_rememberMe),
+                    child: Text(
+                      'Remember me',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _login,
-                  child: _isLoading 
-                    ? const SizedBox(
-                        height: 24, 
-                        width: 24, 
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                      )
-                    : Text(isPatient ? 'Next' : 'Login'),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(isPatient ? 'Next' : 'Login'),
                 ),
               ),
               const SizedBox(height: 32),
 
-              // Social Login
               Row(
                 children: [
                   Expanded(
                     child: Divider(
-                      color: theme.colorScheme.onSurface.withOpacity(0.2),
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.2),
                     ),
                   ),
                   Padding(
@@ -346,13 +457,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       'Or continue with',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.6),
                       ),
                     ),
                   ),
                   Expanded(
                     child: Divider(
-                      color: theme.colorScheme.onSurface.withOpacity(0.2),
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.2),
                     ),
                   ),
                 ],
@@ -361,11 +474,14 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons.g_mobiledata,
-                    size: 32,
-                  ), // Substitute for Google logo
+                  onPressed: _isGoogleLoading ? null : _continueWithGoogle,
+                  icon: _isGoogleLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.g_mobiledata, size: 32),
                   label: const Text('Google'),
                 ),
               ),

@@ -59,20 +59,20 @@ class _Step4CreateMpinScreenState extends State<Step4CreateMpinScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const StepIndicator(currentStep: 4, totalSteps: 5),
+              const StepIndicator(currentStep: 3, totalSteps: 4),
               const SizedBox(height: 24),
               Text(
                 'Create your MPIN',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onBackground,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Set a 4-digit MPIN for quick and secure login.',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onBackground.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
               const Spacer(),
@@ -90,7 +90,9 @@ class _Step4CreateMpinScreenState extends State<Step4CreateMpinScreen> {
                       shape: BoxShape.circle,
                       color: isFilled ? theme.colorScheme.primary : theme.colorScheme.surface,
                       border: Border.all(
-                        color: isFilled ? theme.colorScheme.primary : theme.colorScheme.onBackground.withOpacity(0.3),
+                        color: isFilled
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.3),
                         width: 2,
                       ),
                     ),
@@ -117,7 +119,10 @@ class _Step4CreateMpinScreenState extends State<Step4CreateMpinScreen> {
                     return InkWell(
                       onTap: _onDeleteTap,
                       customBorder: const CircleBorder(),
-                      child: Icon(Icons.backspace_outlined, color: theme.colorScheme.onBackground),
+                      child: Icon(
+                        Icons.backspace_outlined,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     );
                   }
                   
